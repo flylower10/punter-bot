@@ -24,9 +24,33 @@ LOSS_EMOJI = "\u274c"  # red cross
 BET_TYPE_PATTERNS = {
     "btts": re.compile(r"\bbtts\b", re.IGNORECASE),
     "over_under": re.compile(r"\b(over|under)\s+\d+\.?\d*\b", re.IGNORECASE),
-    "handicap": re.compile(r"(?<!\d)[+-]\d+\.?\d*\b"),
+    "handicap": re.compile(r"(?<!\d)[+-]\s*\d+\.?\d*\b"),
     "ht_ft": re.compile(r"\bht[/_]?ft\b", re.IGNORECASE),
 }
+
+# Win bet patterns (for no-odds picks: "Dortmund to beat Mainz", "Liverpool to win")
+WIN_PICK_PATTERNS = [
+    re.compile(r"\bto\s+beat\b", re.IGNORECASE),
+    re.compile(r"\bto\s+win\b", re.IGNORECASE),
+]
+
+
+def _looks_like_pick(text):
+    """Check if text looks like a pick (bet description) without explicit odds."""
+    # Bet type keywords (BTTS, handicap, over/under, ht/ft)
+    for pattern in BET_TYPE_PATTERNS.values():
+        if pattern.search(text):
+            return True
+    # Win bet patterns ("to beat", "to win")
+    for pattern in WIN_PICK_PATTERNS:
+        if pattern.search(text):
+            return True
+    # Team vs team (e.g. "Leicester/Soton", "Scotland + 8")
+    if re.search(r"\w+[/\s]+(v|vs\.?|@)\s*\w+", text, re.IGNORECASE):
+        return True
+    if re.search(r"[+-]\s*\d+\.?\d*", text):  # Handicap-style
+        return True
+    return False
 
 
 def extract_test_prefix(text):
@@ -136,8 +160,12 @@ def _parse_pick(text, sender, sender_phone=""):
             odds_original = match.group(1)
             odds_decimal = float(odds_original)
 
+    # No odds: allow if text looks like a pick (player trusts placer, odds >= 1.5)
     if not odds_original:
-        return None
+        if not _looks_like_pick(text):
+            return None
+        odds_original = "placer"
+        odds_decimal = 2.0  # Default; placer confirms at bookie
 
     # Detect bet type
     bet_type = "win"
@@ -165,3 +193,43 @@ def _make_result(msg_type, text, sender, parsed_data, sender_phone=""):
         "sender_phone": sender_phone,
         "parsed_data": parsed_data,
     }
+
+
+def parse_cumulative_picks(text, emoji_to_player):
+    """
+    Parse a message containing multiple picks, one per line, each prefixed with
+    a player's emoji. Format: "♟️ Dortmund 6/10\\n🃏 Liverpool 2/1"
+
+    Returns list of (player_dict, pick_parsed_data) for each valid line.
+    emoji_to_player: dict from get_emoji_to_player_map().
+    """
+    if not emoji_to_player:
+        return []
+
+    # Sort emojis by length descending so longer sequences match first
+    emojis = sorted(emoji_to_player.keys(), key=len, reverse=True)
+
+    results = []
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        # Find which emoji (if any) this line starts with
+        matched_emoji = None
+        for emoji in emojis:
+            if line.startswith(emoji):
+                matched_emoji = emoji
+                break
+
+        if not matched_emoji:
+            continue
+
+        player = emoji_to_player[matched_emoji]
+        pick_text = line[len(matched_emoji) :].strip()
+
+        pick = _parse_pick(pick_text, player["nickname"], "")
+        if pick and pick["type"] == "pick":
+            results.append((player, pick["parsed_data"]))
+
+    return results

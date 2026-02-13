@@ -1,6 +1,8 @@
 import os
 
-from src.parsers.message_parser import parse_message, extract_test_prefix
+from src.parsers.message_parser import (
+    parse_message, extract_test_prefix, parse_cumulative_picks,
+)
 
 
 class TestCommandParsing:
@@ -76,6 +78,32 @@ class TestPickParsing:
         result = parse_message("\u26bd Manchester United 2/1", "Kev")
         assert result["type"] == "pick"
         assert result["parsed_data"]["odds_original"] == "2/1"
+
+    def test_pick_without_odds_handicap(self):
+        """Handicap-style pick without explicit odds (placer confirms at bookie)."""
+        result = parse_message("Scotland + 8", "DA")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["odds_original"] == "placer"
+        assert result["parsed_data"]["odds_decimal"] == 2.0
+        assert result["parsed_data"]["bet_type"] == "handicap"
+
+    def test_pick_without_odds_to_beat(self):
+        """Win bet without odds."""
+        result = parse_message("Dortmund to beat Mainz", "Pawn")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["odds_original"] == "placer"
+
+    def test_general_chat_not_parsed_as_pick(self):
+        """Short casual messages should not be parsed as picks."""
+        result = parse_message("nice one", "Kev")
+        assert result["type"] == "general"
+
+    def test_pick_without_odds_btts(self):
+        """BTTS pick without odds."""
+        result = parse_message("Leicester Southampton BTTS", "Ed")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["odds_original"] == "placer"
+        assert result["parsed_data"]["bet_type"] == "btts"
 
 
 class TestResultParsing:
@@ -189,3 +217,41 @@ class TestTestMode:
         assert result["parsed_data"]["odds_original"] == "2/1"
 
         Config.TEST_MODE = False
+
+
+class TestCumulativePicks:
+    """Cumulative format: emoji + pick per line."""
+
+    def test_single_line_with_emoji(self):
+        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"}}
+        results = parse_cumulative_picks("\u265f\ufe0f Dortmund to beat Mainz 6/10", emoji_map)
+        assert len(results) == 1
+        player, data = results[0]
+        assert player["nickname"] == "Pawn"
+        assert data["odds_original"] == "6/10"
+        assert "Dortmund" in data["description"]
+
+    def test_multiple_lines(self):
+        emoji_map = {
+            "\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"},
+            "\U0001f0cf": {"id": 2, "nickname": "Kev", "formal_name": "Mr Kevin"},
+        }
+        text = "\u265f\ufe0f Dortmund 6/10\n\U0001f0cf Liverpool 2/1"
+        results = parse_cumulative_picks(text, emoji_map)
+        assert len(results) == 2
+        assert results[0][0]["nickname"] == "Pawn"
+        assert results[0][1]["odds_original"] == "6/10"
+        assert results[1][0]["nickname"] == "Kev"
+        assert results[1][1]["odds_original"] == "2/1"
+
+    def test_empty_emoji_map_returns_nothing(self):
+        results = parse_cumulative_picks("\u265f\ufe0f Dortmund 6/10", {})
+        assert results == []
+
+    def test_lines_without_matching_emoji_skipped(self):
+        emoji_map = {"\u265f\ufe0f": {"id": 1, "nickname": "Pawn", "formal_name": "Master"}}
+        results = parse_cumulative_picks(
+            "\u265f\ufe0f Dortmund 6/10\nRandom text without emoji\n\U0001f0cf Liverpool 2/1",
+            emoji_map,
+        )
+        assert len(results) == 1

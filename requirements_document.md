@@ -57,12 +57,35 @@ The bot uses formal butler-style addressing for all players:
   - Decimal: "2.0", "3.75", "2.0"
 - **Allow price variance:** Quoted odds may differ from actual bet placed
 - **Format:** `[Emoji] [Description] [Odds]`
-- **Example:** "ðŸ§Œ Manchester United 2/1"
+- **Example:** "♟️ Manchester United 2/1"
+
+#### Cumulative Message Format (Thread-Style Picks)
+Players often copy preceding picks and add their own, creating a cumulative message thread:
+- **Format:** One pick per line, each line prefixed with the player's emoji
+- **Example:**
+  ```
+  ♟️ Dortmund to beat Mainz 6/10
+  🧌 Liverpool to win 2/1
+  🍋 Man City Brentford BTTS 8/11
+  ```
+- **Player emoji mapping** (stored in `players.emoji`, supports multiple aliases comma-separated):
+
+| Player | Nickname | Emoji(s) |
+|--------|----------|----------|
+| Edmund | Ed | 🍋, 🍋🍋🍋 |
+| Kevin | Kev | 🧌 |
+| Declan | DA | 👴🏻 |
+| Ronan | Nug | 🍗 |
+| Nialler | Niall | 🔫 |
+| Aidan | Pawn | ♟️ |
+
+- Bot parses each line, matches emoji to player, and submits all picks in one message
 
 #### Validation & Handling
 - **Invalid picks:** Bot attempts to interpret â†’ asks for confirmation
 - **Missing information:** Request clarification
 - **Duplicate submissions:** Accept latest as update
+- **Picks without odds:** Players may omit odds; they trust the placer to use whatever is available at the bookie (≥1.5). Stored as `odds_original: "placer"`, `odds_decimal: 2.0`. Bot confirms: "— placer to confirm odds at the bookie."
 
 #### Deadline Management
 - **Deadline:** Friday 10 PM (strict)
@@ -78,6 +101,13 @@ The bot uses formal butler-style addressing for all players:
 - Bot confirms each pick on receipt in butler style (no response required from player)
 - If a player sends a new pick, it replaces their previous submission for that week
 - If the bot misreads a pick, the player simply resends the corrected version
+
+#### Formal Pick Display
+When the bot displays picks (confirmations, `!picks`, result announcements), it shows a **formal** version rather than echoing the raw message:
+- **Abbreviations expanded:** leics → Leicester, Soton → Southampton, Man City → Manchester City, etc.
+- **Team separator:** `leics/Soton` → `Leicester vs Southampton`
+- **Odds preserved:** Fractional odds (4/6, 2/1) are shown as submitted
+- Raw input is stored in the database; formalization is applied only for display
 
 #### Automated Reminders
 1. **Thursday 7:00 PM** â†' Tag all players: "Reminder: Submit your picks by Friday 10 PM"
@@ -351,9 +381,10 @@ Penalties in Queue:
 
 #### Test Mode
 - **TEST_MODE=true** enables prefix-based player simulation in the test group
-- Format: `Kev: Manchester United 2/1` — bot attributes the pick to Kev
+- **Prefix format:** `Kev: Manchester United 2/1` — bot attributes the pick to Kev
+- **Cumulative/emoji format:** Copy messages from main group into test group — each line `[emoji] [pick]` is parsed and attributed to the matching player (see Player emoji mapping above)
 - Allows a single user to simulate all 6 players for end-to-end testing
-- In production (TEST_MODE=false), players are identified by phone number
+- In production (TEST_MODE=false), players are identified by phone number or emoji (cumulative format works in both modes)
 
 #### Architecture Decisions (from Phase 0)
 - **Bridge uses Node.js `http` module** (not `fetch`) — Node 18's experimental fetch is unreliable for localhost
@@ -773,6 +804,8 @@ Sports APIs (Phase 3)
 
 **User Commands:**
 - `!stats` - Show your personal statistics
+- `!stats [player]` - Stats for a specific player
+- `!picks` - Recorded picks for this week (formal display)
 - `!leaderboard` - Show win rate rankings
 - `!rotation` - Show current rotation and queue
 - `!vault` - Show vault total
@@ -841,11 +874,31 @@ Sports APIs (Phase 3)
 - Command args parser fixed to split all arguments individually
 - `!stats [player]` added for viewing other players' stats
 
+**Version 1.3** - Cumulative pick format (2026-02-13)
+- Added emoji-based cumulative message parsing: one pick per line, `[emoji] [pick]`
+- Player emoji mapping stored in `players.emoji` (supports multiple aliases, e.g. Ed: 🍋,🍋🍋🍋)
+- Enables copying thread-style messages from main group into test group for testing
+- All 6 players have emojis configured
+
+**Version 1.4** - Picks without odds (2026-02-13)
+- Players may submit picks without explicit odds (e.g. "Scotland + 8", "Dortmund to beat Mainz")
+- Player trusts placer to use whatever odds are available at the bookie (≥1.5)
+- Stored as `odds_original: "placer"`, `odds_decimal: 2.0`
+- Pick detection: bet type keywords (BTTS, handicap, over/under), "to beat"/"to win", team vs team
+- Cumulative thread: only acknowledge new picks, not re-submissions already in the thread
+
+**Version 1.5** - Formal pick display (2026-02-13)
+- Bot displays formalized pick text in confirmations, `!picks`, and result announcements
+- Abbreviations expanded (leics→Leicester, Soton→Southampton, Man City→Manchester City, etc.)
+- Team separator `/` rendered as " vs " (e.g. leics/Soton → Leicester vs Southampton)
+- Raw input stored in DB; formalization applied at display time only
+- `!picks` command added to view recorded picks for the current week
+
 **Next Review:** After Phase 2 planning
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-12
+**Last Updated:** 2026-02-13
 **Status:** âœ… Requirements Complete - Ready for Development

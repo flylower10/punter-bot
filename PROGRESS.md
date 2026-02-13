@@ -71,3 +71,4 @@
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
 - **Next**: Live weekend test — copy picks from main group using `Kev: pick text` prefix format
+- **Cumulative format** (2026-02-13): Emoji-based parsing added — copy thread-style messages (`[emoji] [pick]` per line) from main group; all 6 players have emojis configured (Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️)

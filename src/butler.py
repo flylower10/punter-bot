@@ -5,14 +5,45 @@ All bot responses are formatted through this module to maintain
 a consistent butler personality inspired by Stevens from Remains of the Day.
 """
 
+import re
+
+# Abbreviations to formal names for pick display (case-insensitive)
+PICK_ABBREVIATIONS = {
+    "leics": "Leicester",
+    "soton": "Southampton",
+    "man utd": "Manchester United",
+    "man city": "Manchester City",
+    "spurs": "Tottenham",
+    "utd": "United",
+    "villa": "Aston Villa",
+    "wolves": "Wolverhampton",
+    "newc": "Newcastle",
+    "bha": "Brighton",
+    "whu": "West Ham",
+    "qpr": "Queens Park Rangers",
+}
+
+
+def _formalize_pick(description):
+    """Convert abbreviated pick text to formal display format."""
+    if not description or not isinstance(description, str):
+        return description
+    text = description.strip()
+    # Expand abbreviations (longest first to avoid partial matches)
+    for abbr, full in sorted(PICK_ABBREVIATIONS.items(), key=lambda x: -len(x[0])):
+        text = re.sub(re.escape(abbr), full, text, flags=re.IGNORECASE)
+    # Replace "/" between team names with " vs " (not fractional odds like 4/6)
+    text = re.sub(r"([a-zA-Z][a-zA-Z\s]*)/([a-zA-Z][a-zA-Z\s]*)", r"\1 vs \2", text)
+    return text.strip()
+
 
 def pick_confirmed(player, description, odds, is_update=False):
     """Confirm a pick has been recorded."""
     action = "Updated" if is_update else "Noted and recorded"
-    return (
-        f"{action}, {player['formal_name']}. "
-        f"{description} @ {odds}."
-    )
+    formal = _formalize_pick(description)
+    if odds == "placer":
+        return f"{action}, {player['formal_name']}. {formal} — placer to confirm odds at the bookie."
+    return f"{action}, {player['formal_name']}. {formal} @ {odds}."
 
 
 def picks_status(submitted, missing):
@@ -43,9 +74,10 @@ def result_announced(player, description, odds, outcome):
         verdict = "Void."
         prefix = "I must inform you"
 
+    formal = _formalize_pick(description)
     return (
         f"{prefix} \u2014 {player['formal_name']}'s selection: "
-        f"{description} @ {odds}. {verdict}"
+        f"{formal} @ {odds}. {verdict}"
     )
 
 
@@ -215,12 +247,28 @@ def vault_display(total):
     return f"Vault balance: \u20ac{total:.0f}"
 
 
+def picks_display(picks, week_number=None):
+    """Format current week's picks for display."""
+    if not picks:
+        return "No picks recorded for this week yet."
+    lines = ["\U0001f4dc RECORDED PICKS", "\u2501" * 22]
+    if week_number:
+        lines.append(f"Week {week_number}")
+        lines.append("")
+    for p in picks:
+        odds = p["odds_original"] if p["odds_original"] != "placer" else "(placer to confirm)"
+        formal = _formalize_pick(p["description"])
+        lines.append(f"{p['formal_name']}: {formal} @ {odds}")
+    return "\n".join(lines)
+
+
 def help_text():
     """Format the help message."""
     return (
         "At your service. Available commands:\n"
         "!stats — Your personal statistics\n"
         "!stats [player] — Stats for a specific player\n"
+        "!picks — Recorded picks for this week\n"
         "!leaderboard — Win rate rankings\n"
         "!rotation — Current rotation and queue\n"
         "!vault — Vault total\n"

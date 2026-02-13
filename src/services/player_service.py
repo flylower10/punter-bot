@@ -68,3 +68,30 @@ def is_superadmin(sender_phone):
     """Check if the sender is the bot developer (superadmin)."""
     from src.config import Config
     return sender_phone and sender_phone == Config.SUPERADMIN_PHONE
+
+
+def get_emoji_to_player_map():
+    """
+    Return a dict mapping emoji -> player dict for players who have emoji set.
+    Used for parsing cumulative pick messages (emoji + pick per line).
+    Supports multiple emojis per player (comma-separated, e.g. "🍋,🍋🍋🍋").
+    """
+    conn = get_db()
+    players = conn.execute(
+        "SELECT * FROM players WHERE emoji IS NOT NULL AND emoji != ''"
+    ).fetchall()
+    conn.close()
+
+    result = {}
+    for p in players:
+        emoji_str = (p["emoji"] or "").strip()
+        for emoji in emoji_str.split(","):
+            emoji = emoji.strip()
+            if emoji:
+                result[emoji] = dict(p)
+    return result
+
+
+def lookup_player_by_emoji(emoji):
+    """Return player dict for the given emoji, or None."""
+    return get_emoji_to_player_map().get((emoji or "").strip())

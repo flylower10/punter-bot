@@ -5,13 +5,17 @@ from flask import Flask, jsonify, request
 
 from src.config import Config
 from src.db import init_db, get_db
-from src.parsers.message_parser import parse_message
-from src.services.player_service import lookup_player, is_admin, is_superadmin
+from src.parsers.message_parser import parse_message, parse_cumulative_picks
+from src.services.player_service import (
+    lookup_player, is_admin, is_superadmin, get_emoji_to_player_map,
+)
 from src.services.week_service import (
     get_or_create_current_week, get_current_week, is_within_submission_window,
     is_past_deadline, complete_week,
 )
-from src.services.pick_service import submit_pick, get_missing_players, all_picks_in, get_player_pick
+from src.services.pick_service import (
+    submit_pick, get_missing_players, all_picks_in, get_player_pick, get_picks_for_week,
+)
 from src.services.result_service import (
     record_result, get_consecutive_losses, all_results_in as all_results_complete,
     get_week_results, override_result,
@@ -63,19 +67,34 @@ def webhook():
 
     logger.info("Message from %s: %s", sender, body[:100])
 
-    parsed = parse_message(body, sender, sender_phone)
-    logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
-
     reply = None
 
-    if parsed["type"] == "command":
-        reply = handle_command(parsed)
+    # Commands always use single-message parsing
+    if body.strip().startswith("!"):
+        parsed = parse_message(body, sender, sender_phone)
+        if parsed["type"] == "command":
+            reply = handle_command(parsed)
+        elif parsed["type"] == "result":
+            reply = handle_result(parsed)
+        elif parsed["type"] == "pick":
+            reply = handle_pick(parsed)
+    else:
+        # Try cumulative format first (emoji + pick per line)
+        emoji_map = get_emoji_to_player_map()
+        cumulative = parse_cumulative_picks(body, emoji_map)
 
-    elif parsed["type"] == "pick":
-        reply = handle_pick(parsed)
-
-    elif parsed["type"] == "result":
-        reply = handle_result(parsed)
+        if len(cumulative) >= 1:
+            reply = handle_cumulative_picks(cumulative)
+        else:
+            # Fall back to single-message parsing
+            parsed = parse_message(body, sender, sender_phone)
+            logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
+            if parsed["type"] == "command":
+                reply = handle_command(parsed)
+            elif parsed["type"] == "pick":
+                reply = handle_pick(parsed)
+            elif parsed["type"] == "result":
+                reply = handle_result(parsed)
 
     if reply:
         send_message(group_id, reply)
@@ -94,6 +113,9 @@ def handle_command(parsed):
 
     if command == "stats":
         return _cmd_stats(parsed, args)
+
+    if command == "picks":
+        return _cmd_picks()
 
     if command == "leaderboard":
         return _cmd_leaderboard()
@@ -139,6 +161,15 @@ def _cmd_stats(parsed, args):
     if stats["total"] == 0:
         return f"{target['formal_name']} has no recorded results yet."
     return butler.stats_display(target, stats)
+
+
+def _cmd_picks():
+    """!picks — Show recorded picks for the current week."""
+    week = get_current_week()
+    if not week:
+        return "No active week."
+    picks = get_picks_for_week(week["id"])
+    return butler.picks_display(picks, week["week_number"])
 
 
 def _cmd_leaderboard():
@@ -264,8 +295,6 @@ def _cmd_status(parsed):
 
     week = get_current_week()
     week_info = f"Week {week['week_number']} ({week['status']})" if week else "No active week"
-
-    from src.services.pick_service import get_picks_for_week
     picks_count = len(get_picks_for_week(week["id"])) if week else 0
     pending = get_pending_penalties()
 
@@ -290,6 +319,49 @@ def _is_authorized_superadmin(parsed):
     if Config.TEST_MODE:
         return True  # Allow in test mode
     return is_superadmin(parsed.get("sender_phone", ""))
+
+
+def handle_cumulative_picks(cumulative):
+    """
+    Process multiple picks from a cumulative message (emoji + pick per line).
+    Returns combined reply for all successfully submitted picks.
+    """
+    if not is_within_submission_window():
+        logger.info("Cumulative picks ignored — outside submission window")
+        return None
+
+    week = get_or_create_current_week()
+    replies = []
+
+    for player, data in cumulative:
+        pick, is_update = submit_pick(
+            player_id=player["id"],
+            week_id=week["id"],
+            description=data["description"],
+            odds_decimal=data["odds_decimal"],
+            odds_original=data["odds_original"],
+            bet_type=data["bet_type"],
+        )
+        # Only acknowledge new picks — skip re-submissions already in the thread
+        if not is_update:
+            replies.append(
+                butler.pick_confirmed(
+                    player, data["description"], data["odds_original"], is_update
+                )
+            )
+
+    # Add status for missing players
+    missing = get_missing_players(week["id"])
+    if missing:
+        replies.append(butler.picks_status(None, missing))
+    elif all_picks_in(week["id"]):
+        placer = get_next_placer()
+        if placer:
+            replies.append(butler.all_picks_in(placer))
+        else:
+            replies.append("All selections have been received.")
+
+    return "\n".join(replies)
 
 
 def handle_pick(parsed):
