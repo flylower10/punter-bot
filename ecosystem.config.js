@@ -26,8 +26,7 @@ module.exports = {
     },
     {
       name: "punter-flask",
-      script: "-m",
-      args: ["src.app"],
+      script: "src/app.py",
       cwd: "./",
       interpreter: "./venv/bin/python",
       instances: 1,
@@ -37,6 +36,7 @@ module.exports = {
       env: {
         FLASK_DEBUG: "false",
         FLASK_ENV: "production",
+        PYTHONPATH: ".",
       },
       error_file: "./logs/flask-error.log",
       out_file: "./logs/flask-out.log",
