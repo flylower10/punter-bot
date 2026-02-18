@@ -84,8 +84,9 @@ const INTRO_MESSAGE = [
 ].join("\n");
 
 client.on("group_join", async (notification) => {
-  const botId = client.info?.wid?._serialized;
-  if (!botId || !notification.recipientIds?.includes(botId)) return; // Bot wasn't added
+  const botId = client.info && client.info.wid && client.info.wid._serialized;
+  const recipientIds = notification.recipientIds || [];
+  if (!botId || !recipientIds.includes(botId)) return; // Bot wasn't added
   try {
     await notification.reply(INTRO_MESSAGE);
     console.log(`Intro sent to group: ${notification.chatId || "unknown"}`);

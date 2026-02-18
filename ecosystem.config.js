@@ -26,7 +26,8 @@ module.exports = {
     },
     {
       name: "punter-flask",
-      script: "src/app.py",
+      script: "-m",
+      args: ["src.app"],
       cwd: "./",
       interpreter: "./venv/bin/python",
       instances: 1,
