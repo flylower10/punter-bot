@@ -118,8 +118,8 @@ def webhook():
 
         return jsonify({"action": "replied", "reply": reply})
 
-    # No structured reply — shadow banter for Brian or bot mentions only
-    if Config.SHADOW_GROUP_ID and body.strip() and (_is_brian(sender) or _BANTER_TRIGGERS.search(body)):
+    # No structured reply — shadow banter for Brian stirring or bot mentions only
+    if Config.SHADOW_GROUP_ID and body.strip() and ((_is_brian(sender) and _brian_is_stirring(body)) or _BANTER_TRIGGERS.search(body)):
         _shadow_banter(sender, sender_phone, body)
 
     return jsonify({"action": "no_reply"})
@@ -625,15 +625,28 @@ def _is_brian(sender):
     return sender and sender.lower().startswith("brian")
 
 
+_BRIAN_BAIT_PATTERNS = re.compile(
+    r"(lose|losing|loss|shocking|terrible|awful|useless|hopeless|waste|"
+    r"dreadful|rubbish|pathetic|joke|deluded|clueless|donkey|clown|"
+    r"no chance|never win|give up|pack it in|sensible|smart money|"
+    r"told you|knew it|called it|wrong again|ed |edmund)",
+    re.IGNORECASE,
+)
+
+
+def _brian_is_stirring(body):
+    """Return True if Brian's message looks like he's trying to wind someone up."""
+    return bool(_BRIAN_BAIT_PATTERNS.search(body))
+
+
 def _try_banter(body, sender, sender_phone):
     """
-    Respond to Brian (Foley) always, or when the bot is mentioned directly.
-    No random banter on other messages.
+    Respond when the bot is mentioned directly, or when Brian is stirring.
     """
     mentioned = bool(_BANTER_TRIGGERS.search(body))
-    brian = _is_brian(sender)
+    brian_stirring = _is_brian(sender) and _brian_is_stirring(body)
 
-    if not mentioned and not brian:
+    if not mentioned and not brian_stirring:
         return None
 
     player = lookup_player(sender_phone=sender_phone, sender_name=sender)
@@ -646,8 +659,8 @@ def _try_banter(body, sender, sender_phone):
         )
     else:
         context = (
-            f'Brian (The Folak Express) said in the group: "{body}"\n\n'
-            f"Respond in character. One sharp sentence."
+            f'Brian (The Folak Express) is stirring in the group: "{body}"\n\n'
+            f"Respond in character. One sharp sentence. Either play along or cut him down."
         )
 
     return llm_client.generate(context, player_name=player_name)
