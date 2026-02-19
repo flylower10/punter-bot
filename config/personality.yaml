@@ -68,6 +68,5 @@ personas:
       Whisper, don't monologue — one devastating line beats a paragraph.
 
 # --- LLM settings ---
-banter_rate: 0.15
 temperature: 0.9
 max_tokens: 80

@@ -105,7 +105,7 @@ def webhook():
     if not reply and (has_media or _looks_like_bet_placed(body)):
         reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
-    # Banter: if no structured reply, try LLM banter (mention or random chance)
+    # Banter: respond to Brian (Foley) or direct bot mentions only
     if not reply and body.strip() and Config.LLM_ENABLED:
         reply = _try_banter(body, sender, sender_phone)
 
@@ -118,8 +118,8 @@ def webhook():
 
         return jsonify({"action": "replied", "reply": reply})
 
-    # No structured reply — still try shadow banter on general chat
-    if Config.SHADOW_GROUP_ID and body.strip():
+    # No structured reply — shadow banter for Brian or bot mentions only
+    if Config.SHADOW_GROUP_ID and body.strip() and (_is_brian(sender) or _BANTER_TRIGGERS.search(body)):
         _shadow_banter(sender, sender_phone, body)
 
     return jsonify({"action": "no_reply"})
@@ -620,13 +620,21 @@ _BANTER_TRIGGERS = re.compile(
 )
 
 
+def _is_brian(sender):
+    """Check if the sender is Brian (Foley)."""
+    return sender and sender.lower().startswith("brian")
+
+
 def _try_banter(body, sender, sender_phone):
     """
-    Attempt a banter response to general chat.
-    Always responds when the bot is mentioned; otherwise defers to the
-    random banter_rate in the personality config.
+    Respond to Brian (Foley) always, or when the bot is mentioned directly.
+    No random banter on other messages.
     """
     mentioned = bool(_BANTER_TRIGGERS.search(body))
+    brian = _is_brian(sender)
+
+    if not mentioned and not brian:
+        return None
 
     player = lookup_player(sender_phone=sender_phone, sender_name=sender)
     player_name = _first_name_from_player(player) if player else sender
@@ -634,13 +642,15 @@ def _try_banter(body, sender, sender_phone):
     if mentioned:
         context = (
             f'{sender} said (addressing you directly): "{body}"\n\n'
-            f"Respond in character. Keep it to 1-2 sentences."
+            f"Respond in character. One sharp sentence."
         )
-        response = llm_client.generate(context, player_name=player_name)
-        if response:
-            return response
+    else:
+        context = (
+            f'Brian (The Folak Express) said in the group: "{body}"\n\n'
+            f"Respond in character. One sharp sentence."
+        )
 
-    return llm_client.generate_banter(body, sender, player_name=player_name)
+    return llm_client.generate(context, player_name=player_name)
 
 
 def _first_name_from_player(player):

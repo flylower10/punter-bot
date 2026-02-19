@@ -6,7 +6,6 @@ Thin wrapper around the Groq API. Returns enhanced text or None
 """
 
 import logging
-import random
 from pathlib import Path
 
 import requests
@@ -168,28 +167,3 @@ def generate(context, scenario=None, player_name=None):
         return None
 
 
-def generate_banter(message, sender_name, player_name=None):
-    """
-    Generate a banter response to general chat.
-
-    Args:
-        message: The raw chat message
-        sender_name: Display name of the sender
-        player_name: Formal first name if known (for profile lookup)
-
-    Returns:
-        Banter response string, or None.
-    """
-    if not Config.LLM_ENABLED or not Config.GROQ_API_KEY:
-        return None
-
-    personality = _load_personality()
-    banter_rate = personality.get("banter_rate", 0.15)
-
-    if random.random() > banter_rate:
-        return None
-
-    lookup = player_name or sender_name
-    context = f'{sender_name} said in the group chat: "{message}"\n\nRespond in character if you have something witty to say. Keep it to 1-2 sentences.'
-
-    return generate(context, scenario=None, player_name=lookup)
