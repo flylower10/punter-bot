@@ -1,11 +1,16 @@
 """
 The Betting Butler — message formatting module.
 
-All bot responses are formatted through this module to maintain
-a consistent butler personality inspired by Stevens from Remains of the Day.
+All bot responses are formatted through this module. When LLM is enabled,
+responses are generated dynamically via Groq; otherwise falls back to templates.
 """
 
+import logging
 import re
+
+from src import llm_client
+
+logger = logging.getLogger(__name__)
 
 # Abbreviations to formal names for pick display (case-insensitive)
 PICK_ABBREVIATIONS = {
@@ -37,6 +42,12 @@ def _formalize_pick(description):
     return text.strip()
 
 
+def _first_name(player):
+    """Extract the first name from formal_name (e.g. 'Mr Edmund' -> 'Edmund')."""
+    formal = player.get("formal_name", "")
+    return formal.replace("Mr ", "").strip() if formal.startswith("Mr ") else formal
+
+
 def _strip_odds_for_display(text):
     """Remove odds from pick text so we don't repeat them when showing @ [odds]."""
     if not text:
@@ -50,17 +61,31 @@ def _strip_odds_for_display(text):
 
 def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None):
     """Confirm a pick has been recorded."""
-    action = "Updated" if is_update else "Noted and recorded"
     formal = _formalize_pick(description)
+    display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
+    odds_display = odds if odds != "placer" else "(placer to confirm)"
+
+    context = (
+        f"{'Updated' if is_update else 'New'} pick recorded for {player['formal_name']}: "
+        f"{display_text} @ {odds_display}."
+    )
+    if is_update and previous_description:
+        prev = _strip_odds_for_display(_formalize_pick(previous_description))
+        context += f" Replacing previous pick: {prev}."
+
+    enhanced = llm_client.generate(context, player_name=_first_name(player))
+    if enhanced:
+        return enhanced
+
+    # Template fallback
+    action = "Updated" if is_update else "Noted and recorded"
     if odds == "placer":
         placer_name = placer["formal_name"] if placer else "Placer"
         body = f"{formal} — {placer_name} to confirm odds when placing the bet."
     else:
-        display_text = _strip_odds_for_display(formal)
-        body = f"{display_text} @ {odds}."
+        body = f"{_strip_odds_for_display(formal)} @ {odds}."
     if is_update and previous_description:
-        previous_formal = _formalize_pick(previous_description)
-        previous_display = _strip_odds_for_display(previous_formal)
+        previous_display = _strip_odds_for_display(_formalize_pick(previous_description))
         return f"{action}, {player['formal_name']}.  Replacing {previous_display} with {body}"
     return f"{action}, {player['formal_name']}.  {body}"
 
@@ -75,6 +100,13 @@ def picks_status(submitted, missing):
 
 def all_picks_in(placer):
     """Announce all picks are in and who places the bet."""
+    context = (
+        f"All picks are in. {placer['formal_name']} is next in the rotation to place the bet."
+    )
+    enhanced = llm_client.generate(context, scenario="all_picks_in", player_name=_first_name(placer))
+    if enhanced:
+        return enhanced
+
     return (
         f"All selections have been received.  "
         f"{placer['formal_name']}, you are next in the rotation to place the wager."
@@ -83,11 +115,41 @@ def all_picks_in(placer):
 
 def bet_slip_received(player):
     """Confirm bet slip screenshot received from the placer."""
+    context = f"{player['formal_name']} has uploaded the bet slip screenshot. Acknowledge it."
+    enhanced = llm_client.generate(context, player_name=_first_name(player))
+    if enhanced:
+        return enhanced
+
     return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."
 
 
-def result_announced(player, description, odds, outcome):
+def result_announced(player, description, odds, outcome, streak=None):
     """Announce a result."""
+    formal = _formalize_pick(description)
+    display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
+
+    scenario = "win" if outcome == "win" else "loss" if outcome == "loss" else None
+    if streak and outcome == "loss":
+        streak_num = int(streak.rstrip("L")) if streak.endswith("L") else 0
+        if streak_num >= 7:
+            scenario = "losing_streak_7"
+        elif streak_num >= 5:
+            scenario = "losing_streak_5"
+        elif streak_num >= 3:
+            scenario = "losing_streak_3"
+
+    context = (
+        f"Result for {player['formal_name']}: {display_text} @ {odds}. "
+        f"Outcome: {outcome}."
+    )
+    if streak:
+        context += f" Current streak: {streak}."
+
+    enhanced = llm_client.generate(context, scenario=scenario, player_name=_first_name(player))
+    if enhanced:
+        return enhanced
+
+    # Template fallback
     if outcome == "win":
         verdict = "\u2705 Winner."
         prefix = "I'm pleased to report"
@@ -98,8 +160,6 @@ def result_announced(player, description, odds, outcome):
         verdict = "Void."
         prefix = "I must inform you"
 
-    formal = _formalize_pick(description)
-    display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
     return (
         f"{prefix} \u2014 {player['formal_name']}'s selection: "
         f"{display_text} @ {odds}.  {verdict}"
@@ -108,12 +168,37 @@ def result_announced(player, description, odds, outcome):
 
 def penalty_suggested(player, streak_count, penalty_type, amount):
     """Suggest a penalty for Ed to confirm."""
+    scenario = "late_submission" if penalty_type == "late" else "penalty_triggered"
+
+    if penalty_type == "late":
+        context = (
+            f"{player['formal_name']} submitted after the deadline. "
+            f"Penalty: they will place next week's wager. "
+            f"Must include: !confirm penalty {player['nickname']}"
+        )
+    elif penalty_type == "streak_3":
+        context = (
+            f"{player['formal_name']} has {streak_count} consecutive losses. "
+            f"Penalty: pay for next week's bet. "
+            f"Must include: !confirm penalty {player['nickname']}"
+        )
+    else:
+        context = (
+            f"{player['formal_name']} has {streak_count} consecutive losses. "
+            f"Penalty: \u20ac{amount:.0f} to the vault. "
+            f"Must include: !confirm penalty {player['nickname']}"
+        )
+
+    enhanced = llm_client.generate(context, scenario=scenario, player_name=_first_name(player))
+    if enhanced:
+        return enhanced
+
+    # Template fallback
     if penalty_type == "late":
         return (
             f"{player['formal_name']}, your selection was received after the deadline.  "
             f"You will place next week's wager.  Rotation queue updated."
         )
-
     if penalty_type == "streak_3":
         return (
             f"I regret to inform you that {player['formal_name']} has incurred "
@@ -121,7 +206,6 @@ def penalty_suggested(player, streak_count, penalty_type, amount):
             f"for next week's bet.  Mr Edmund, would you kindly confirm: "
             f"!confirm penalty {player['nickname']}"
         )
-
     return (
         f"I regret to inform you that {player['formal_name']} has incurred "
         f"{streak_count} consecutive losses.  The suggested penalty is "
@@ -132,6 +216,21 @@ def penalty_suggested(player, streak_count, penalty_type, amount):
 
 def penalty_confirmed(player, amount, vault_total):
     """Confirm a penalty has been applied."""
+    if amount > 0:
+        context = (
+            f"Penalty confirmed for {player['formal_name']}. "
+            f"\u20ac{amount:.0f} to the vault (vault total now \u20ac{vault_total:.0f}). "
+            f"They must send \u20ac{amount:.0f} to Mr Edmund via Revolut."
+        )
+    else:
+        context = (
+            f"Penalty confirmed. {player['formal_name']} will place next week's wager."
+        )
+
+    enhanced = llm_client.generate(context, scenario="penalty_triggered", player_name=_first_name(player))
+    if enhanced:
+        return enhanced
+
     if amount > 0:
         return (
             f"Penalty confirmed.  Vault updated: \u20ac{vault_total:.0f} total.\n"
@@ -148,42 +247,78 @@ def week_complete_summary(results, week_number, leaderboard, rotation_next):
     """
     winners = [r for r in results if r["outcome"] == "win"]
     losers = [r for r in results if r["outcome"] == "loss"]
-
-    lines = [f"Weekend complete \u2014 Week {week_number}."]
-
-    if winners:
-        winner_names = [r["formal_name"] for r in winners]
-        lines.append(f"Won: {', '.join(winner_names)}")
-
-    if losers:
-        loser_names = [r["formal_name"] for r in losers]
-        lines.append(f"Lost: {', '.join(loser_names)}")
-
     won_count = len(winners)
     total = len(results)
+
+    winner_names = [r["formal_name"] for r in winners]
+    loser_names = [r["formal_name"] for r in losers]
+
+    context = (
+        f"Week {week_number} is complete. "
+        f"Winners: {', '.join(winner_names) if winner_names else 'none'}. "
+        f"Losers: {', '.join(loser_names) if loser_names else 'none'}. "
+        f"Accumulator: {'Won' if won_count == total else 'Lost'} ({won_count} of {total})."
+    )
+    if rotation_next and rotation_next.get("formal_name"):
+        context += f" Next to place: {rotation_next['formal_name']}."
+
+    enhanced = llm_client.generate(context, scenario="week_summary")
+    if enhanced:
+        # LLM handles the narrative; still append the structured leaderboard
+        lb_section = _format_leaderboard_section(leaderboard, rotation_next)
+        if lb_section:
+            return enhanced + "\n\n" + lb_section
+        return enhanced
+
+    # Template fallback
+    lines = [f"Weekend complete \u2014 Week {week_number}."]
+    if winner_names:
+        lines.append(f"Won: {', '.join(winner_names)}")
+    if loser_names:
+        lines.append(f"Lost: {', '.join(loser_names)}")
     lines.append(f"Accumulator: {'Won' if won_count == total else 'Lost'} ({won_count} of {total} won)")
 
-    if leaderboard and rotation_next and rotation_next.get("formal_name"):
-        lines.extend([
-            "",
-            "\U0001f3c6 LEADERBOARD",
-            "\u2501" * 22,
-        ])
-        medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
-        for i, entry in enumerate(leaderboard):
-            medal = medals[i] if i < 3 else "  "
-            lines.append(
-                f"{medal} {entry['formal_name']}: {entry['win_rate']:.1f}% "
-                f"({entry['wins']}/{entry['total']})"
-            )
-            lines.append(f"   Form: {entry['form']}")
-        lines.extend(["", f"Next to place: {rotation_next['formal_name']}"])
+    lb_section = _format_leaderboard_section(leaderboard, rotation_next)
+    if lb_section:
+        lines.extend(["", lb_section])
 
+    return "\n".join(lines)
+
+
+def _format_leaderboard_section(leaderboard, rotation_next):
+    """Format the leaderboard section for the week summary."""
+    if not leaderboard or not rotation_next or not rotation_next.get("formal_name"):
+        return ""
+    lines = [
+        "\U0001f3c6 LEADERBOARD",
+        "\u2501" * 22,
+    ]
+    medals = ["\U0001f947", "\U0001f948", "\U0001f949"]
+    for i, entry in enumerate(leaderboard):
+        medal = medals[i] if i < 3 else "  "
+        lines.append(
+            f"{medal} {entry['formal_name']}: {entry['win_rate']:.1f}% "
+            f"({entry['wins']}/{entry['total']})"
+        )
+        lines.append(f"   Form: {entry['form']}")
+    lines.extend(["", f"Next to place: {rotation_next['formal_name']}"])
     return "\n".join(lines)
 
 
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
+    hint = llm_client.get_persona_hint()
+    context = (
+        "It's Thursday evening. Remind all players that picks are due by 10 PM Friday. "
+        "This is the first reminder of the week."
+    )
+    if hint:
+        context += f"\n\nAlso weave in this cryptic hint about your identity: \"{hint}\""
+
+    enhanced = llm_client.generate(context, scenario="reminder")
+    if enhanced:
+        return enhanced
+
     return (
         "Good evening, gentlemen.  May I remind you that picks are due "
         "by 10 PM Friday."
@@ -193,6 +328,14 @@ def reminder_thursday():
 def reminder_friday(missing):
     """Friday 5PM reminder to missing players."""
     names = [p["formal_name"] for p in missing]
+    context = (
+        f"It's Friday 5PM. Still waiting on picks from: {_join_names(names)}. "
+        f"5 hours until the deadline. This is the second reminder -- be more impatient."
+    )
+    enhanced = llm_client.generate(context, scenario="reminder")
+    if enhanced:
+        return enhanced
+
     return (
         f"Pardon the interruption.  {_join_names(names)} \u2014 "
         f"5 hours remain to submit your selections."
@@ -202,6 +345,14 @@ def reminder_friday(missing):
 def reminder_final(missing):
     """Friday 9:30PM final warning."""
     names = [p["formal_name"] for p in missing]
+    context = (
+        f"FINAL WARNING. 30 minutes until deadline. Still missing picks from: {_join_names(names)}. "
+        f"This is the last reminder -- be borderline threatening."
+    )
+    enhanced = llm_client.generate(context, scenario="reminder")
+    if enhanced:
+        return enhanced
+
     return (
         f"I do hope you'll forgive the urgency.  {_join_names(names)} \u2014 "
         f"30 minutes remain.  This is the final reminder."

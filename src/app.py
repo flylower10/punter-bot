@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 import requests
 from flask import Flask, jsonify, request
@@ -28,6 +29,7 @@ from src.services.penalty_service import (
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue, get_rotation_display, advance_rotation
 from src.services.stats_service import get_player_stats, get_leaderboard
 import src.butler as butler
+from src import llm_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -102,6 +104,10 @@ def webhook():
     # Screenshot or confirmation text from next placer = bet placed (all picks in)
     if not reply and (has_media or _looks_like_bet_placed(body)):
         reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
+
+    # Banter: if no structured reply, try LLM banter (mention or random chance)
+    if not reply and body.strip() and Config.LLM_ENABLED:
+        reply = _try_banter(body, sender, sender_phone)
 
     if reply:
         send_message(group_id, reply)
@@ -569,13 +575,15 @@ def handle_result(parsed):
     # Record the result
     result = record_result(pick["id"], data["outcome"], confirmed_by=parsed["sender"])
 
+    # Get streak info for both announcement and penalty check
+    streak = get_consecutive_losses(target_player["id"])
+    streak_str = f"{streak}L" if streak > 0 and data["outcome"] == "loss" else None
+
     # Build announcement
     reply = butler.result_announced(
-        target_player, pick["description"], pick["odds_original"], data["outcome"]
+        target_player, pick["description"], pick["odds_original"], data["outcome"],
+        streak=streak_str,
     )
-
-    # Check for streak penalties
-    streak = get_consecutive_losses(target_player["id"])
     penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
     penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}
 
@@ -596,6 +604,42 @@ def handle_result(parsed):
         )
 
     return reply
+
+
+_BANTER_TRIGGERS = re.compile(
+    r"\b(butler|bot|betting butler)\b", re.IGNORECASE
+)
+
+
+def _try_banter(body, sender, sender_phone):
+    """
+    Attempt a banter response to general chat.
+    Always responds when the bot is mentioned; otherwise defers to the
+    random banter_rate in the personality config.
+    """
+    mentioned = bool(_BANTER_TRIGGERS.search(body))
+
+    player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+    player_name = _first_name_from_player(player) if player else sender
+
+    if mentioned:
+        context = (
+            f'{sender} said (addressing you directly): "{body}"\n\n'
+            f"Respond in character. Keep it to 1-2 sentences."
+        )
+        response = llm_client.generate(context, player_name=player_name)
+        if response:
+            return response
+
+    return llm_client.generate_banter(body, sender, player_name=player_name)
+
+
+def _first_name_from_player(player):
+    """Extract first name from player dict for LLM profile lookup."""
+    if not player:
+        return None
+    formal = player.get("formal_name", "")
+    return formal.replace("Mr ", "").strip() if formal.startswith("Mr ") else formal
 
 
 def send_message(chat_id, text):

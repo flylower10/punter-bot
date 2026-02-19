@@ -4,3 +4,4 @@ requests==2.32.3
 pytest==8.3.4
 pytz==2024.2
 apscheduler==3.10.4
+pyyaml==6.0.2

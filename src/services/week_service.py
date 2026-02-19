@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 
 import pytz
 
 from src.config import Config
 from src.db import get_db
+
+logger = logging.getLogger(__name__)
 
 
 def _now():
@@ -54,6 +57,16 @@ def get_or_create_current_week():
         (season, week_number),
     ).fetchone()
     conn.close()
+
+    # New week = new persona
+    try:
+        from src.llm_client import reset_persona
+        persona = reset_persona()
+        if persona:
+            logger.info("New week %d — persona: %s", week_number, persona.get("name", "?"))
+    except Exception:
+        pass
+
     return dict(week)
 
 
