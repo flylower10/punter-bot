@@ -47,6 +47,7 @@ const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
+    protocolTimeout: 120000, // 2 min — slow VMs (e.g. OCI) need more time for WhatsApp Web init
     ...(executablePath && { executablePath }),
     args: [
       "--no-sandbox",
