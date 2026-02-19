@@ -2,13 +2,16 @@ require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") }
 const path = require("path");
 const { execSync } = require("child_process");
 
-// Patch Puppeteer launch timeout before whatsapp-web.js loads (timeout often not passed through)
-const puppeteer = require("puppeteer");
-const origLaunch = puppeteer.launch.bind(puppeteer);
-puppeteer.launch = (opts = {}) => {
-  const timeout = opts.timeout || 180000;
-  return origLaunch({ ...opts, timeout });
-};
+// Patch Puppeteer launch timeout before whatsapp-web.js loads (must patch module exports)
+const puppeteerMod = require("puppeteer");
+const origLaunch = puppeteerMod.launch.bind(puppeteerMod);
+const patchedLaunch = (opts = {}) => origLaunch({ ...opts, timeout: opts.timeout || 180000 });
+puppeteerMod.launch = patchedLaunch;
+const mod = require.cache[require.resolve("puppeteer")];
+if (mod?.exports) {
+  mod.exports.launch = patchedLaunch;
+  if (mod.exports.default) mod.exports.default.launch = patchedLaunch;
+}
 
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
