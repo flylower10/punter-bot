@@ -111,7 +111,16 @@ def webhook():
 
     if reply:
         send_message(group_id, reply)
+
+        # Shadow mode: also send LLM-enhanced version to the shadow group
+        if Config.SHADOW_GROUP_ID:
+            _shadow_message(sender, body, reply, group_id)
+
         return jsonify({"action": "replied", "reply": reply})
+
+    # No structured reply — still try shadow banter on general chat
+    if Config.SHADOW_GROUP_ID and body.strip():
+        _shadow_banter(sender, sender_phone, body)
 
     return jsonify({"action": "no_reply"})
 
@@ -640,6 +649,63 @@ def _first_name_from_player(player):
         return None
     formal = player.get("formal_name", "")
     return formal.replace("Mr ", "").strip() if formal.startswith("Mr ") else formal
+
+
+def _shadow_message(sender, body, template_reply, source_group_id):
+    """
+    Send an LLM-enhanced version of a bot reply to the shadow group.
+    Shows what the sender said, the template reply, and the LLM version.
+    """
+    try:
+        # Temporarily force LLM on for the shadow call
+        original_enabled = Config.LLM_ENABLED
+        Config.LLM_ENABLED = True
+
+        # Re-derive the LLM context from the template reply
+        context = (
+            f"The bot just sent this template response to the group:\n"
+            f'"{template_reply}"\n\n'
+            f"Rewrite this response in your character's voice. Keep the same factual "
+            f"information but make it entertaining. 1-3 sentences."
+        )
+        player = lookup_player(sender_name=sender)
+        player_name = _first_name_from_player(player) if player else sender
+
+        enhanced = llm_client.generate(context, player_name=player_name)
+        Config.LLM_ENABLED = original_enabled
+
+        if enhanced:
+            shadow_msg = f"[{sender}]: {body}\n\n🤖 LLM: {enhanced}"
+            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+        else:
+            shadow_msg = f"[{sender}]: {body}\n\n📋 Template: {template_reply}"
+            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+    except Exception as e:
+        logger.warning("Shadow message failed: %s", e)
+
+
+def _shadow_banter(sender, sender_phone, body):
+    """Try LLM banter in the shadow group for general chat messages."""
+    try:
+        original_enabled = Config.LLM_ENABLED
+        Config.LLM_ENABLED = True
+
+        player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+        player_name = _first_name_from_player(player) if player else sender
+
+        # Always try banter in shadow mode (ignore banter_rate)
+        context = (
+            f'{sender} said in the group chat: "{body}"\n\n'
+            f"Respond in character if you have something witty to say. Keep it to 1-2 sentences."
+        )
+        response = llm_client.generate(context, player_name=player_name)
+        Config.LLM_ENABLED = original_enabled
+
+        if response:
+            shadow_msg = f"[{sender}]: {body}\n\n🤖 Banter: {response}"
+            send_message(Config.SHADOW_GROUP_ID, shadow_msg)
+    except Exception as e:
+        logger.warning("Shadow banter failed: %s", e)
 
 
 def send_message(chat_id, text):

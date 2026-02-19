@@ -26,3 +26,5 @@ class Config:
     # LLM personality feature
     LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+    # Shadow mode: mirror main group messages to this group with LLM responses
+    SHADOW_GROUP_ID = os.getenv("SHADOW_GROUP_ID", "")
