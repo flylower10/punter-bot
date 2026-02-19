@@ -19,6 +19,7 @@ data/
 # WhatsApp session
 bridge/.wwebjs_auth/
 bridge/.wwebjs_cache/
+bridge/qr.png
 
 # PM2 logs
 logs/

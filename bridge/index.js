@@ -50,7 +50,8 @@ const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    protocolTimeout: 300000, // 5 min — OCI Always Free VM is slow; WhatsApp Web init needs time
+    timeout: 120000, // 2 min — Chrome launch is slow on OCI VM
+    protocolTimeout: 300000, // 5 min — WhatsApp Web init needs time
     ...(executablePath && { executablePath }),
     args: [
       "--no-sandbox",
@@ -68,10 +69,18 @@ const client = new Client({
   },
 });
 
-// Display QR code for authentication
-client.on("qr", (qr) => {
+// Display QR code for authentication (terminal + PNG file for PM2/headless)
+const QR_PATH = path.join(__dirname, "qr.png");
+client.on("qr", async (qr) => {
   console.log("Scan this QR code to authenticate:");
   qrcode.generate(qr, { small: true });
+  try {
+    const qrPng = require("qrcode");
+    await qrPng.toFile(QR_PATH, qr);
+    console.log(`QR also saved to ${QR_PATH} — view or download to scan`);
+  } catch (e) {
+    console.log("(QR file save skipped:", e.message, ")");
+  }
 });
 
 client.on("ready", () => {
@@ -288,6 +297,13 @@ app.post("/send", async (req, res) => {
 app.get("/health", (req, res) => {
   const state = client.info ? "connected" : "disconnected";
   res.json({ status: "ok", whatsapp: state });
+});
+
+app.get("/qr", (req, res) => {
+  if (!fs.existsSync(QR_PATH)) {
+    return res.status(404).json({ error: "No QR code yet — wait for bridge to show one" });
+  }
+  res.sendFile(QR_PATH);
 });
 
 app.get("/group-members", async (req, res) => {
