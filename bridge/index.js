@@ -26,8 +26,11 @@ const GROUP_CHAT_ID = process.env.GROUP_CHAT_ID || "";
 const _groupIdsRaw = process.env.GROUP_CHAT_IDS || "";
 const GROUP_CHAT_IDS = _groupIdsRaw ? _groupIdsRaw.split(",").map((g) => g.trim()).filter(Boolean) : [];
 
-// Use system Chrome if Puppeteer's bundled Chrome isn't found (e.g. in sandbox)
+// Prefer system Chrome/Chromium (often lighter than Puppeteer's bundle; helps on low-RAM VMs)
 const chromePaths = [
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+  "/usr/bin/google-chrome",
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
 ];
