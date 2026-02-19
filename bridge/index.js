@@ -50,7 +50,7 @@ const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    timeout: 120000, // 2 min — Chrome launch is slow on OCI VM
+    timeout: 180000, // 3 min — Chrome launch is slow on OCI VM (WS endpoint wait)
     protocolTimeout: 300000, // 5 min — WhatsApp Web init needs time
     ...(executablePath && { executablePath }),
     args: [
@@ -345,7 +345,9 @@ async function initWithRetry(attempt = 1) {
     const isRetryable =
       msg.includes("Execution context was destroyed") ||
       msg.includes("Protocol error") ||
-      msg.includes("ProtocolError");
+      msg.includes("ProtocolError") ||
+      msg.includes("TimeoutError") ||
+      msg.includes("Timed out after");
     if (isRetryable && attempt < MAX_INIT_RETRIES) {
       console.log(`Init failed (attempt ${attempt}/${MAX_INIT_RETRIES}), retrying in ${INIT_RETRY_DELAY_MS / 1000}s...`);
       try {
