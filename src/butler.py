@@ -100,13 +100,6 @@ def picks_status(submitted, missing):
 
 def all_picks_in(placer):
     """Announce all picks are in and who places the bet."""
-    context = (
-        f"All picks are in. {placer['formal_name']} is next in the rotation to place the bet."
-    )
-    enhanced = llm_client.generate(context, scenario="all_picks_in", player_name=_first_name(placer))
-    if enhanced:
-        return enhanced
-
     return (
         f"All selections have been received.  "
         f"{placer['formal_name']}, you are next in the rotation to place the wager."
@@ -115,11 +108,6 @@ def all_picks_in(placer):
 
 def bet_slip_received(player):
     """Confirm bet slip screenshot received from the placer."""
-    context = f"{player['formal_name']} has uploaded the bet slip screenshot. Acknowledge it."
-    enhanced = llm_client.generate(context, player_name=_first_name(player))
-    if enhanced:
-        return enhanced
-
     return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."
 
 
@@ -168,32 +156,6 @@ def result_announced(player, description, odds, outcome, streak=None):
 
 def penalty_suggested(player, streak_count, penalty_type, amount):
     """Suggest a penalty for Ed to confirm."""
-    scenario = "late_submission" if penalty_type == "late" else "penalty_triggered"
-
-    if penalty_type == "late":
-        context = (
-            f"{player['formal_name']} submitted after the deadline. "
-            f"Penalty: they will place next week's wager. "
-            f"Must include: !confirm penalty {player['nickname']}"
-        )
-    elif penalty_type == "streak_3":
-        context = (
-            f"{player['formal_name']} has {streak_count} consecutive losses. "
-            f"Penalty: pay for next week's bet. "
-            f"Must include: !confirm penalty {player['nickname']}"
-        )
-    else:
-        context = (
-            f"{player['formal_name']} has {streak_count} consecutive losses. "
-            f"Penalty: \u20ac{amount:.0f} to the vault. "
-            f"Must include: !confirm penalty {player['nickname']}"
-        )
-
-    enhanced = llm_client.generate(context, scenario=scenario, player_name=_first_name(player))
-    if enhanced:
-        return enhanced
-
-    # Template fallback
     if penalty_type == "late":
         return (
             f"{player['formal_name']}, your selection was received after the deadline.  "
@@ -216,21 +178,6 @@ def penalty_suggested(player, streak_count, penalty_type, amount):
 
 def penalty_confirmed(player, amount, vault_total):
     """Confirm a penalty has been applied."""
-    if amount > 0:
-        context = (
-            f"Penalty confirmed for {player['formal_name']}. "
-            f"\u20ac{amount:.0f} to the vault (vault total now \u20ac{vault_total:.0f}). "
-            f"They must send \u20ac{amount:.0f} to Mr Edmund via Revolut."
-        )
-    else:
-        context = (
-            f"Penalty confirmed. {player['formal_name']} will place next week's wager."
-        )
-
-    enhanced = llm_client.generate(context, scenario="penalty_triggered", player_name=_first_name(player))
-    if enhanced:
-        return enhanced
-
     if amount > 0:
         return (
             f"Penalty confirmed.  Vault updated: \u20ac{vault_total:.0f} total.\n"
@@ -307,14 +254,9 @@ def _format_leaderboard_section(leaderboard, rotation_next):
 
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
-    hint = llm_client.get_persona_hint()
     context = (
-        "It's Thursday evening. Remind all players that picks are due by 10 PM Friday. "
-        "This is the first reminder of the week."
+        "It's Thursday evening. Remind all players that picks are due by 10 PM Friday."
     )
-    if hint:
-        context += f"\n\nAlso weave in this cryptic hint about your identity: \"{hint}\""
-
     enhanced = llm_client.generate(context, scenario="reminder")
     if enhanced:
         return enhanced
