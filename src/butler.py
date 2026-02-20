@@ -379,8 +379,17 @@ def picks_display(picks, week_number=None):
             result_suffix = " \u274c"
         elif outcome == "void":
             result_suffix = " Void"
-        lines.append(f"{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
+        emoji = _primary_emoji(p.get("emoji", ""))
+        prefix = f"{emoji} " if emoji else ""
+        lines.append(f"{prefix}{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
     return "\n".join(lines)
+
+
+def _primary_emoji(emoji_str):
+    """Get the primary emoji from a comma-separated emoji string."""
+    if not emoji_str:
+        return ""
+    return emoji_str.split(",")[0].strip()
 
 
 def help_text():

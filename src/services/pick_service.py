@@ -67,7 +67,7 @@ def get_picks_for_week(week_id):
     """Return all picks for a given week, joined with player info and result if available."""
     conn = get_db()
     picks = conn.execute(
-        "SELECT p.*, pl.nickname, pl.formal_name, r.outcome as result_outcome "
+        "SELECT p.*, pl.nickname, pl.formal_name, pl.emoji, r.outcome as result_outcome "
         "FROM picks p "
         "JOIN players pl ON p.player_id = pl.id "
         "LEFT JOIN results r ON r.pick_id = p.id "
