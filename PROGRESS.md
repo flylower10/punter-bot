@@ -62,7 +62,7 @@
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
 
-## Current State (2026-02-17)
+## Current State (2026-02-20)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
@@ -71,10 +71,12 @@
 - **SSH tunnel for bridge**: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
-- **LLM personality**: Deployed in shadow mode — main group uses templates, test group receives LLM-enhanced versions
-- **Active persona**: Colonel Slade (rotates on next new week)
+- **LLM personality**: Shadow mode active — Colonel Slade only. Main group uses templates, test group gets LLM-enhanced versions
+- **LLM scope**: Narrowed to pick confirmations, results, reminders, Brian banter only. Commands (!picks, !stats, etc.) use clean templates.
 - **Cumulative format**: Emoji-based parsing — Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️
-- **Next**: Monitor shadow mode over the weekend, review LLM quality, tune if needed, then enable on main group
+- **!picks display**: Now shows player emojis alongside picks
+- **This week**: Picks live — Ed (Liverpool 3/4), Aidan, Kev, DA recorded. Awaiting Niall, Nug.
+- **Next**: Monitor shadow mode over the weekend, tune Colonel Slade if needed, then enable on main group
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
@@ -116,12 +118,10 @@
 - [x] `src/butler.py` — LLM enhances output; template fallback if LLM fails
 - [x] Feature flag: `LLM_ENABLED` in `.env` (off for main group)
 
-### Personas (rotate weekly)
-- [x] Colonel Slade — fierce military motivator
-- [x] Zeke the Mad Prophet — unhinged cosmic shaman
-- [x] Big Dan — folksy Southern storyteller
-- [x] The Silver-Tongued Tempter — suave philosophical devil
-- [x] Persona rotates on new week creation
+### Personas (rotate weekly — rotation logic preserved)
+- [x] Colonel Slade — fierce military motivator (active, sole persona for now)
+- [ ] Add more personas once Colonel Slade is tuned
+- [x] Persona rotation logic built — selects randomly on new week creation
 
 ### Player Nicknames (replaces "Mr X" convention for LLM)
 - [x] Ed: Ed, The Hospital Bed, Edmundo, Eddie Mc, Bitter Bitter Ed
@@ -136,7 +136,15 @@
 - [x] Bot responds to Brian only when he's stirring (provocative keyword detection)
 - [x] Bot responds when directly mentioned ("butler", "bot", "betting butler")
 - [x] No random banter on general chat — removed banter_rate
-- [x] Responses are sharp: 1 sentence ideal, 2 max, max_tokens=80
+- [x] Responses are sharp: 1 sentence ideal, 2 max, max_tokens=60
+
+### LLM Scope (narrowed after initial testing)
+- [x] LLM ON: pick confirmations, result announcements, reminders, Brian banter
+- [x] LLM OFF: !picks, !stats, !leaderboard, !rotation, !vault, !help, all_picks_in, bet slip, penalties
+- [x] Commands use clean structured templates — no LLM rewriting
+
+### Display Improvements
+- [x] Player emojis shown in !picks output (🍋 Ed, ♟️ Pawn, 🧌 Kev, etc.)
 
 ### Shadow Testing Mode
 - [x] `SHADOW_GROUP_ID` in `.env` — test group receives LLM-enhanced versions

@@ -367,6 +367,7 @@ def picks_display(picks, week_number=None):
     if week_number:
         lines.append(f"Week {week_number}")
         lines.append("")
+    pick_summaries = []
     for p in picks:
         odds = p["odds_original"] if p["odds_original"] != "placer" else "(placer to confirm)"
         formal = _formalize_pick(p["description"])
@@ -382,7 +383,28 @@ def picks_display(picks, week_number=None):
         emoji = _primary_emoji(p.get("emoji", ""))
         prefix = f"{emoji} " if emoji else ""
         lines.append(f"{prefix}{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
-    return "\n".join(lines)
+        pick_summaries.append(f"{p['formal_name']}: {display_text} @ {odds}")
+
+    body = "\n".join(lines)
+
+    kicker = _picks_kicker(pick_summaries)
+    if kicker:
+        body += f"\n\n{kicker}"
+
+    return body
+
+
+def _picks_kicker(pick_summaries):
+    """Generate a short one-liner comment on the week's picks."""
+    if not pick_summaries:
+        return None
+    context = (
+        f"Here are this week's picks:\n"
+        + "\n".join(pick_summaries)
+        + "\n\nWrite ONE short punchy reaction to these picks. "
+        + "No more than 10 words. No preamble."
+    )
+    return llm_client.generate(context)
 
 
 def _primary_emoji(emoji_str):

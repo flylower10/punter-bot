@@ -1024,21 +1024,30 @@ Sports APIs (Phase 3)
 
 **Version 0.16** - LLM personality & shadow testing (2026-02-17)
 - **LLM integration**: Groq API (llama-3.3-70b-versatile, free tier) rewrites bot responses with rotating weekly persona
-- **Personas**: Colonel Slade, Zeke the Mad Prophet, Big Dan, The Silver-Tongued Tempter — rotate on new week
+- **Personas**: Colonel Slade (sole persona for now; rotation logic preserved for adding more later)
 - **Player nicknames**: Replaced "Mr X" convention for LLM mode — each player has multiple nicknames the bot varies between
 - **Brian (Foley)**: Non-player profile added — bot responds only when he's being provocative (keyword detection)
 - **Banter rules**: No random banter; bot only speaks when mentioned directly or Brian is stirring
-- **Response style**: Short and sharp — 1 sentence ideal, 2 max, max_tokens=80
+- **Response style**: Short and sharp — 1 sentence ideal, 2 max, max_tokens=60
 - **Shadow mode**: `SHADOW_GROUP_ID` mirrors main group to test group with LLM on; main group stays on templates
 - **Test endpoint**: `/test-webhook` processes picks/results/chat safely in test group only (main group never contacted)
 - **Config-driven**: All personality in `config/personality.yaml`, no code changes needed
 - **Feature flag**: `LLM_ENABLED` in `.env` — currently off for main group
 
-**Next Review:** After shadow testing weekend review
+**Version 0.17** - LLM scope narrowed & display improvements (2026-02-20)
+- **LLM scope reduced**: After initial shadow testing, LLM was too verbose and theatrical. Narrowed to: pick confirmations, result announcements, reminders, Brian banter only
+- **Commands stay templated**: `!picks`, `!stats`, `!leaderboard`, `!rotation`, `!vault`, `!help` — all use clean structured templates, no LLM rewriting
+- **Penalties/bet slip templated**: `all_picks_in`, `bet_slip_received`, `penalty_suggested`, `penalty_confirmed` — all reverted to templates
+- **Persona hints removed**: Thursday reminders no longer include cryptic persona identity hints
+- **Single persona**: Stripped back to Colonel Slade only — tune one voice before adding more
+- **Player emojis in !picks**: Each pick line now prefixed with the player's emoji identifier (🍋, ♟️, 🧌, 👴🏻, 🔫, 🍗)
+- **Bug fix**: Restored `import random` removed during banter cleanup (caused 500 on pick processing)
+
+**Next Review:** After weekend shadow testing and LLM tuning
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-19
+**Last Updated:** 2026-02-20
 **Status:** âœ… Requirements Complete - Ready for Development
