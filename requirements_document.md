@@ -1043,11 +1043,18 @@ Sports APIs (Phase 3)
 - **Player emojis in !picks**: Each pick line now prefixed with the player's emoji identifier (🍋, ♟️, 🧌, 👴🏻, 🔫, 🍗)
 - **Bug fix**: Restored `import random` removed during banter cleanup (caused 500 on pick processing)
 
-**Next Review:** After weekend shadow testing and LLM tuning
+**Version 0.18** - Rotation fix, admin phones, display polish (2026-02-21)
+- **Rotation queue fixed**: All 6 players always shown in order. Penalty turns insert before the player's standard slot (player appears twice+). Previously penalty players were excluded from standard rotation.
+- **Admin phone configured**: `ADMIN_PHONE` was empty — set to Ed's phone (`353871527436@c.us`). Ed can now record results.
+- **Player phones stored**: All 6 player phone numbers populated in DB (were all NULL). Enables phone-based player lookup.
+- **Emoji + Mr Name format**: Used throughout — rotation queue, picks display, "Awaiting selection" messages all show emoji prefix.
+- **!picks LLM kicker**: Structured picks list kept unchanged; optional one-liner LLM reaction appended at the end.
+
+**Next Review:** After first full weekend run with results
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-21
 **Status:** âœ… Requirements Complete - Ready for Development

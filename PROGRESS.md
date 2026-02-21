@@ -62,7 +62,7 @@
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
 
-## Current State (2026-02-20)
+## Current State (2026-02-21)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
@@ -71,12 +71,14 @@
 - **SSH tunnel for bridge**: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
+- **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Shadow mode active — Colonel Slade only. Main group uses templates, test group gets LLM-enhanced versions
-- **LLM scope**: Narrowed to pick confirmations, results, reminders, Brian banter only. Commands (!picks, !stats, etc.) use clean templates.
+- **LLM scope**: Narrowed to pick confirmations, results, reminders, Brian banter. Commands use clean templates with optional LLM kicker.
+- **Display format**: Emoji + Mr Name convention throughout (picks, rotation, awaiting messages)
+- **Rotation queue**: Fixed — always shows all 6 players; penalty turns insert before player's standard slot
 - **Cumulative format**: Emoji-based parsing — Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️
-- **!picks display**: Now shows player emojis alongside picks
-- **This week**: Picks live — Ed (Liverpool 3/4), Aidan, Kev, DA recorded. Awaiting Niall, Nug.
-- **Next**: Monitor shadow mode over the weekend, tune Colonel Slade if needed, then enable on main group
+- **This week (Week 1)**: Results being processed live. Ed posting results.
+- **Next**: Monitor shadow mode, tune Colonel Slade, then enable LLM on main group
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
@@ -144,7 +146,20 @@
 - [x] Commands use clean structured templates — no LLM rewriting
 
 ### Display Improvements
-- [x] Player emojis shown in !picks output (🍋 Ed, ♟️ Pawn, 🧌 Kev, etc.)
+- [x] Emoji + Mr Name format used throughout (picks, rotation, awaiting messages)
+- [x] Player emojis shown in !picks output (🍋 Mr Edmund, ♟️ Mr Aidan, etc.)
+- [x] !picks adds optional LLM kicker line after structured data
+- [x] Rotation queue shows emojis for all players
+
+### Rotation Queue Fix
+- [x] All 6 players always listed in rotation order
+- [x] Penalty turns insert before the player's standard slot (player appears twice+)
+- [x] Previous bug: penalty players were excluded from standard rotation
+
+### Admin & Phone Setup (2026-02-21)
+- [x] ADMIN_PHONE set for Ed (`353871527436@c.us`) — Ed can now record results
+- [x] All 6 player phone numbers stored in DB (were all NULL)
+- [x] Bug fix: Ed's results were rejected ("not admin") because ADMIN_PHONE was empty
 
 ### Shadow Testing Mode
 - [x] `SHADOW_GROUP_ID` in `.env` — test group receives LLM-enhanced versions
