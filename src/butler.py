@@ -268,11 +268,11 @@ def reminder_thursday():
 
 
 def reminder_friday(missing):
-    """Friday 5PM reminder to missing players."""
+    """Friday 7PM reminder to missing players."""
     names = [p["formal_name"] for p in missing]
     context = (
-        f"It's Friday 5PM. Still waiting on picks from: {_join_names(names)}. "
-        f"5 hours until the deadline. This is the second reminder -- be more impatient."
+        f"It's Friday 7PM. Still waiting on picks from: {_join_names(names)}. "
+        f"3 hours until the deadline. This is the second reminder -- be more impatient."
     )
     enhanced = llm_client.generate(context, scenario="reminder")
     if enhanced:
@@ -280,7 +280,7 @@ def reminder_friday(missing):
 
     return (
         f"Pardon the interruption.  {_join_names(names)} \u2014 "
-        f"5 hours remain to submit your selections."
+        f"3 hours remain to submit your selections."
     )
 
 

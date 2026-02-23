@@ -1,12 +1,17 @@
 """
 LLM client for personality-enhanced bot responses.
 
-Thin wrapper around the Groq API. Returns enhanced text or None
-(triggering template fallback in butler.py).
+Calls the Groq API and returns framing lines for the butler persona.
+Returns a dict {"opening": "...", "closing": "..."} — never a full message.
+Structured content is assembled by butler.py templates and is never touched here.
+
+Falls back to {"opening": "", "closing": ""} on any failure so templates
+render cleanly without any butler framing rather than breaking.
 """
 
+import json
 import logging
-import random
+import re
 from pathlib import Path
 
 import requests
@@ -17,7 +22,9 @@ from src.config import Config
 logger = logging.getLogger(__name__)
 
 _personality = None
-_active_persona = None
+
+# Fallback returned on any LLM failure — butler.py renders template only
+_EMPTY_FRAMING = {"opening": "", "closing": ""}
 
 
 def _load_personality():
@@ -34,100 +41,117 @@ def _load_personality():
 
     with open(config_path, "r", encoding="utf-8") as f:
         _personality = yaml.safe_load(f) or {}
-    logger.info("Loaded personality config with %d personas", len(_personality.get("personas", [])))
+
+    logger.info("Loaded personality config")
     return _personality
-
-
-def get_active_persona():
-    """Return the currently active persona dict, selecting one randomly if needed."""
-    global _active_persona
-    if _active_persona is not None:
-        return _active_persona
-
-    personality = _load_personality()
-    personas = personality.get("personas", [])
-    if not personas:
-        return None
-
-    _active_persona = random.choice(personas)
-    logger.info("Selected persona for this period: %s", _active_persona.get("name", "Unknown"))
-    return _active_persona
-
-
-def reset_persona():
-    """Force a new random persona selection (called at week start)."""
-    global _active_persona
-    _active_persona = None
-    return get_active_persona()
-
-
-def get_persona_hint():
-    """Return the active persona's cryptic hint for the week-opening message."""
-    persona = get_active_persona()
-    if persona:
-        return persona.get("hint", "")
-    return ""
 
 
 def _build_system_prompt(scenario=None, player_name=None):
     """
-    Assemble the full system prompt from:
-    1. Active persona's base prompt
-    2. Global rules
-    3. Player profile (if relevant)
-    4. Non-player profile (if relevant)
-    5. Scenario instruction (if relevant)
+    Assemble the full system prompt from the YAML config:
+      1. Character definition
+      2. Voice rules
+      3. Player or non-player profile (if relevant)
+      4. Scenario guidance (if relevant)
+      5. Output format instructions (always included)
     """
     personality = _load_personality()
-    persona = get_active_persona()
-    if not persona:
+    if not personality:
         return None
 
-    parts = [persona.get("system_prompt", "").strip()]
+    parts = []
 
-    rules = personality.get("rules", "")
-    if rules:
-        parts.append(f"\nRULES:\n{rules.strip()}")
+    character = personality.get("character", "").strip()
+    if character:
+        parts.append(character)
+
+    voice = personality.get("voice", "").strip()
+    if voice:
+        parts.append(f"VOICE RULES:\n{voice}")
 
     if player_name:
         profiles = personality.get("player_profiles", {})
         non_players = personality.get("non_players", {})
         profile = profiles.get(player_name) or non_players.get(player_name)
         if profile:
-            parts.append(f"\nAbout {player_name}: {profile}")
+            if isinstance(profile, dict):
+                formal_name = profile.get("formal_name", player_name)
+                relationship = profile.get("relationship", "")
+                notes = profile.get("notes", "").strip()
+                profile_text = f"Formal name: {formal_name}."
+                if relationship:
+                    profile_text += f" Relationship: {relationship}."
+                if notes:
+                    profile_text += f"\n{notes}"
+            else:
+                profile_text = str(profile)
+            parts.append(f"PLAYER CONTEXT — {player_name}:\n{profile_text}")
 
     if scenario:
         scenarios = personality.get("scenarios", {})
-        instruction = scenarios.get(scenario)
+        instruction = scenarios.get(scenario, "").strip()
         if instruction:
-            parts.append(f"\nSituation guidance: {instruction}")
+            parts.append(f"SITUATION — {scenario}:\n{instruction}")
 
-    return "\n".join(parts)
+    output_format = personality.get("output_format", "").strip()
+    if output_format:
+        parts.append(f"OUTPUT FORMAT:\n{output_format}")
+
+    return "\n\n".join(parts)
 
 
-def generate(context, scenario=None, player_name=None):
+def _parse_framing(content):
     """
-    Generate an LLM-enhanced response.
+    Parse the LLM response into {"opening": "...", "closing": "..."}.
+
+    Handles:
+      - Clean JSON: {"opening": "...", "closing": "..."}
+      - JSON wrapped in markdown code fences
+      - Malformed responses (returns empty framing)
+    """
+    if not content:
+        return _EMPTY_FRAMING
+
+    # Strip markdown code fences if present
+    cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", content).strip()
+
+    try:
+        data = json.loads(cleaned)
+        opening = str(data.get("opening", "")).strip()
+        closing = str(data.get("closing", "")).strip()
+        return {"opening": opening, "closing": closing}
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        logger.warning("LLM returned non-JSON response: %s", content[:200])
+        return _EMPTY_FRAMING
+
+
+def get_framing(context, scenario=None, player_name=None):
+    """
+    Get opening and closing framing lines from the butler persona.
 
     Args:
-        context: A string describing what the bot needs to say (structured data,
-                 not raw user input). E.g. "Pick confirmed for Edmund: Liverpool @ 3/4"
-        scenario: Optional scenario key matching personality.yaml scenarios
-        player_name: Optional formal first name for player-specific profile lookup
+        context:     What just happened — factual description for the LLM.
+                     E.g. "Mr Kevin's pick, Liverpool @ 3/4, has won."
+        scenario:    Key matching a scenario in personality.yaml
+                     E.g. "result_win", "reminder_thursday", "week_complete"
+        player_name: First name matching a player_profiles key in personality.yaml
+                     E.g. "Kevin", "Edmund", "Brian"
 
     Returns:
-        Enhanced response string, or None if LLM is unavailable/disabled.
+        dict with keys "opening" and "closing" — both strings, either may be empty.
+        Never raises. Falls back to empty framing on any failure.
     """
     if not Config.LLM_ENABLED or not Config.GROQ_API_KEY:
-        return None
+        return _EMPTY_FRAMING
 
     system_prompt = _build_system_prompt(scenario=scenario, player_name=player_name)
     if not system_prompt:
-        return None
+        return _EMPTY_FRAMING
 
     personality = _load_personality()
-    temperature = personality.get("temperature", 0.9)
-    max_tokens = personality.get("max_tokens", 150)
+    temperature = personality.get("temperature", 0.7)
+    max_tokens = personality.get("max_tokens", 120)
+    model = personality.get("model", "llama-3.3-70b-versatile")
 
     try:
         resp = requests.post(
@@ -137,34 +161,33 @@ def generate(context, scenario=None, player_name=None):
                 "Content-Type": "application/json",
             },
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": context},
                 ],
                 "temperature": temperature,
                 "max_tokens": max_tokens,
+                "response_format": {"type": "json_object"},
             },
             timeout=5,
         )
 
         if resp.status_code != 200:
             logger.warning("Groq API returned %d: %s", resp.status_code, resp.text[:200])
-            return None
+            return _EMPTY_FRAMING
 
         data = resp.json()
         content = data["choices"][0]["message"]["content"].strip()
-        if not content:
-            return None
-
-        logger.info("LLM response (%s): %s", get_active_persona().get("name", "?"), content[:100])
-        return content
+        framing = _parse_framing(content)
+        logger.info("LLM framing — opening: %s | closing: %s",
+                    framing["opening"][:80] if framing["opening"] else "(empty)",
+                    framing["closing"][:80] if framing["closing"] else "(empty)")
+        return framing
 
     except requests.Timeout:
         logger.warning("Groq API timed out")
-        return None
+        return _EMPTY_FRAMING
     except Exception as e:
         logger.warning("Groq API error: %s", e)
-        return None
-
-
+        return _EMPTY_FRAMING

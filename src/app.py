@@ -650,20 +650,8 @@ def _try_banter(body, sender, sender_phone):
         return None
 
     player = lookup_player(sender_phone=sender_phone, sender_name=sender)
-    player_name = _first_name_from_player(player) if player else sender
-
-    if mentioned:
-        context = (
-            f'{sender} said (addressing you directly): "{body}"\n\n'
-            f"Respond in character. One sharp sentence."
-        )
-    else:
-        context = (
-            f'Brian (The Folak Express) is stirring in the group: "{body}"\n\n'
-            f"Respond in character. One sharp sentence. Either play along or cut him down."
-        )
-
-    return llm_client.generate(context, player_name=player_name)
+    reply = butler.banter_reply(sender, body, player=player)
+    return reply if reply else None
 
 
 def _first_name_from_player(player):
