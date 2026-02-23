@@ -53,6 +53,7 @@
 | Test mode | Prefix format (`Kev: pick text`) | Quick to type, explicit player attribution |
 | Results processing | Ed only (by phone number) | Prevents banter with emojis being misread as results |
 | Bridge .env loading | dotenv with path to project root .env | Single source of truth for config |
+| Friday reminder time | 7PM (changed from 5PM) | Better fit for group's schedule |
 
 ## Known Issues & Gotchas
 
@@ -61,24 +62,21 @@
 - **Bot reply loops**: `message_create` captures bot's own replies. Fixed with `botSentMessages` tracking set in the bridge
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
+- **`_shadow_message()` broken**: Still calls old `llm_client.generate()` which no longer exists. Non-critical — wrapped in try/except so main group unaffected. Needs fix before shadow mode works again.
 
-## Current State (2026-02-21)
+## Current State (2026-02-23)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **SSH tunnel for bridge**: `ssh -L 3000:localhost:3000 -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
 - **Tests**: 73 passing (31 parser + 42 service tests)
 - **Phase 1 complete**: All services wired up, commands working, scheduler initialized
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
-- **LLM personality**: Shadow mode active — Colonel Slade only. Main group uses templates, test group gets LLM-enhanced versions
-- **LLM scope**: Narrowed to pick confirmations, results, reminders, Brian banter. Commands use clean templates with optional LLM kicker.
-- **Display format**: Emoji + Mr Name convention throughout (picks, rotation, awaiting messages)
-- **Rotation queue**: Fixed — always shows all 6 players; penalty turns insert before player's standard slot
-- **Cumulative format**: Emoji-based parsing — Ed 🍋, Kev 🧌, DA 👴🏻, Nug 🍗, Nialler 🔫, Pawn ♟️
-- **This week (Week 1)**: Results being processed live. Ed posting results.
-- **Next**: Monitor shadow mode, tune Colonel Slade, then enable LLM on main group
+- **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
+- **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content
+- **Shadow mode**: `_shadow_message()` currently broken — needs fix before shadow testing resumes
+- **Friday reminder**: Updated to 7PM
 
 ## Phase 0.5: Cloud Migration [LIVE]
 
@@ -101,7 +99,7 @@
 - [x] WhatsApp authenticated and bot live (2026-02-18)
 - [x] First live message sent to main group (2026-02-19)
 - [x] Ed's missed pick (Liverpool 3/4) recorded via webhook
-- [ ] Validate unattended Fri–Mon run
+- [x] Validate unattended Fri–Mon run (Week 1 complete)
 - [ ] Test remote restart via OCI console
 
 ### Deployment Hygiene (completed 2026-02-19)
@@ -109,79 +107,65 @@
 - [x] **Puppeteer launch timeout patch permanent** — `postinstall` script in `bridge/package.json` auto-patches `puppeteer-core` timeout (30s -> 180s) after any `npm install`.
 - [x] **PM2 state saved** — `pm2 save` run; all three processes auto-restart on VM reboot.
 - [x] **Local changes committed and pushed** — All OCI deployment fixes committed and synced to server.
-- [x] **Telegram alerting** — Health check sends alerts via Telegram bot (@punteralerts_bot) when Flask or Bridge goes down, and recovery notifications when they come back up. Replaces macOS desktop notifications.
+- [x] **Telegram alerting** — Health check sends alerts via Telegram bot (@punteralerts_bot) when Flask or Bridge goes down, and recovery notifications when they come back up.
 
-## Phase 1.5: LLM Personality [LIVE — Shadow Testing]
+## Phase 1.5: LLM Personality [LIVE — Main Group]
 
-### Architecture
+### Architecture (Rewritten 2026-02-23)
 - [x] Groq API integration (llama-3.3-70b-versatile, free tier)
-- [x] `src/llm_client.py` — API wrapper with persona management
-- [x] `config/personality.yaml` — all personality config in one YAML file, no code changes needed
-- [x] `src/butler.py` — LLM enhances output; template fallback if LLM fails
-- [x] Feature flag: `LLM_ENABLED` in `.env` (off for main group)
+- [x] `src/llm_client.py` — complete rewrite; `generate()` replaced by `get_framing()` returning `{"opening": "...", "closing": "..."}`
+- [x] `src/butler.py` — complete rewrite; LLM frames templates, never replaces them
+- [x] `config/personality.yaml` — complete rewrite; new butler character config (Colonel Slade removed)
+- [x] `src/app.py` — `_try_banter()` updated to call `butler.banter_reply()`
+- [x] Feature flag: `LLM_ENABLED` in `.env` (currently `true` for main group)
 
-### Personas (rotate weekly — rotation logic preserved)
-- [x] Colonel Slade — fierce military motivator (active, sole persona for now)
-- [ ] Add more personas once Colonel Slade is tuned
-- [x] Persona rotation logic built — selects randomly on new week creation
+### Butler Character (defined 2026-02-23)
+The butler is formally nameless — the lads call him Botsu. He finds the whole enterprise faintly absurd and quietly charming. Warm beneath the formality. Serves faithfully, holds no opinions on selections, unflappable in chaos.
 
-### Player Nicknames (replaces "Mr X" convention for LLM)
-- [x] Ed: Ed, The Hospital Bed, Edmundo, Eddie Mc, Bitter Bitter Ed
-- [x] Kev: Kev Mc, Monster Mc, Caoimh, Barreler
-- [x] Ronan: Nugget, Nug, Goldie, Nugent
-- [x] Niall: Nialler, Gun, Scrunnion
-- [x] Aidan: Pawn, the Evil Pawn, MaHogAner, Mawner, Aidean Moghan
-- [x] Declan: DA, Don, Dec, Father
-- [x] Brian (non-player): The Folak Express, Folak
+**Message structure:**
+- Opening line (butler-voiced, one sentence)
+- Structured template content (unchanged)
+- Closing line (butler-voiced, one sentence)
+- Slightly more latitude (two sentences) for week open/close
 
-### Banter Rules
-- [x] Bot responds to Brian only when he's stirring (provocative keyword detection)
-- [x] Bot responds when directly mentioned ("butler", "bot", "betting butler")
-- [x] No random banter on general chat — removed banter_rate
-- [x] Responses are sharp: 1 sentence ideal, 2 max, max_tokens=60
+**Player relationships:**
+- Ed: Professional admiration — runs a tight ship, the butler approves
+- Kev: Mild affection, never stated — simply a good egg
+- DA: Gentle old-world formality — steady, treated accordingly
+- Nug: Patient loyalty — he'll come good eventually
+- Nialler: Philosophical acceptance — defies categorisation, peace made with this
+- Pawn: Wry acknowledgment — built the butler, irony noted and risen above
+- Brian (non-player): Diplomatic wariness — acknowledged occasionally, bait never taken; one perfectly calibrated remark that gives him nothing
 
-### LLM Scope (narrowed after initial testing)
-- [x] LLM ON: pick confirmations, result announcements, reminders, Brian banter
-- [x] LLM OFF: !picks, !stats, !leaderboard, !rotation, !vault, !help, all_picks_in, bet slip, penalties
-- [x] Commands use clean structured templates — no LLM rewriting
+**LLM scope:**
+- ON: pick confirmations, result announcements, reminders, banter (direct mentions, Brian stirring)
+- OFF: !picks, !stats, !leaderboard, !rotation, !vault, !help, bet slip, penalties (clean templates)
 
-### Display Improvements
-- [x] Emoji + Mr Name format used throughout (picks, rotation, awaiting messages)
-- [x] Player emojis shown in !picks output (🍋 Mr Edmund, ♟️ Mr Aidan, etc.)
-- [x] !picks adds optional LLM kicker line after structured data
-- [x] Rotation queue shows emojis for all players
+### Shadow Mode [BROKEN — needs fix]
+- `_shadow_message()` in `app.py` still calls old `llm_client.generate()` — throws silent error
+- Main group unaffected (wrapped in try/except)
+- Fix required before shadow testing can resume next weekend
+- Bridge only reads `GROUP_CHAT_ID` (singular) — does not support `GROUP_CHAT_IDS` for multi-group monitoring
 
-### Rotation Queue Fix
-- [x] All 6 players always listed in rotation order
-- [x] Penalty turns insert before the player's standard slot (player appears twice+)
-- [x] Previous bug: penalty players were excluded from standard rotation
-
-### Admin & Phone Setup (2026-02-21)
-- [x] ADMIN_PHONE set for Ed (`353871527436@c.us`) — Ed can now record results
-- [x] All 6 player phone numbers stored in DB (were all NULL)
-- [x] Bug fix: Ed's results were rejected ("not admin") because ADMIN_PHONE was empty
-
-### Shadow Testing Mode
-- [x] `SHADOW_GROUP_ID` in `.env` — test group receives LLM-enhanced versions
-- [x] Main group gets safe template responses (LLM off)
-- [x] Shadow mode mirrors: original message + LLM response to test group
-- [x] `/test-webhook` endpoint — processes picks/results/banter safely in test group only
-- [ ] Validate shadow mode over the weekend with real messages
-- [ ] Review LLM output quality and tune personality config
-- [ ] Enable LLM on main group once satisfied
+### Kill Switch
+To disable LLM quickly if needed:
+```bash
+sed -i 's/LLM_ENABLED=true/LLM_ENABLED=false/' ~/punter-bot/.env
+pm2 restart all
+```
 
 ## Phase 2: Enhancements [PLANNED]
 
 ### Bet Slip & Other
 - [ ] Bet slip image reading (OCR)
-- [ ] Rotation queue visibility
-- [ ] Monday recap
+- [ ] Monday recap (currently week summary fires when last result is in)
+- [ ] Fix `_shadow_message()` for shadow testing to resume
 
 ## Phase 3: Intelligence [PLANNED]
 
 ### API & Validation
 - [ ] API integration (The Odds API, API-Football)
-- [ ] **Match start validation** — Check if pick is for a match that has already started; warn or void (e.g. Thursday match picked on Friday after kick-off)
+- [ ] **Match start validation** — Check if pick is for a match that has already started; warn or void
 - [ ] Automatic result detection
 - [ ] Live score updates
 - [ ] Historical analytics
