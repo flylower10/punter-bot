@@ -62,22 +62,7 @@ def _strip_odds_for_display(text):
 def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None):
     """Confirm a pick has been recorded."""
     formal = _formalize_pick(description)
-    display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
-    odds_display = odds if odds != "placer" else "(placer to confirm)"
 
-    context = (
-        f"{'Updated' if is_update else 'New'} pick recorded for {player['formal_name']}: "
-        f"{display_text} @ {odds_display}."
-    )
-    if is_update and previous_description:
-        prev = _strip_odds_for_display(_formalize_pick(previous_description))
-        context += f" Replacing previous pick: {prev}."
-
-    enhanced = llm_client.generate(context, player_name=_first_name(player))
-    if enhanced:
-        return enhanced
-
-    # Template fallback
     action = "Updated" if is_update else "Noted and recorded"
     if odds == "placer":
         placer_name = placer["formal_name"] if placer else "Placer"
@@ -116,28 +101,6 @@ def result_announced(player, description, odds, outcome, streak=None):
     formal = _formalize_pick(description)
     display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
 
-    scenario = "win" if outcome == "win" else "loss" if outcome == "loss" else None
-    if streak and outcome == "loss":
-        streak_num = int(streak.rstrip("L")) if streak.endswith("L") else 0
-        if streak_num >= 7:
-            scenario = "losing_streak_7"
-        elif streak_num >= 5:
-            scenario = "losing_streak_5"
-        elif streak_num >= 3:
-            scenario = "losing_streak_3"
-
-    context = (
-        f"Result for {player['formal_name']}: {display_text} @ {odds}. "
-        f"Outcome: {outcome}."
-    )
-    if streak:
-        context += f" Current streak: {streak}."
-
-    enhanced = llm_client.generate(context, scenario=scenario, player_name=_first_name(player))
-    if enhanced:
-        return enhanced
-
-    # Template fallback
     if outcome == "win":
         verdict = "\u2705 Winner."
         prefix = "I'm pleased to report"
@@ -200,24 +163,6 @@ def week_complete_summary(results, week_number, leaderboard, rotation_next):
     winner_names = [r["formal_name"] for r in winners]
     loser_names = [r["formal_name"] for r in losers]
 
-    context = (
-        f"Week {week_number} is complete. "
-        f"Winners: {', '.join(winner_names) if winner_names else 'none'}. "
-        f"Losers: {', '.join(loser_names) if loser_names else 'none'}. "
-        f"Accumulator: {'Won' if won_count == total else 'Lost'} ({won_count} of {total})."
-    )
-    if rotation_next and rotation_next.get("formal_name"):
-        context += f" Next to place: {rotation_next['formal_name']}."
-
-    enhanced = llm_client.generate(context, scenario="week_summary")
-    if enhanced:
-        # LLM handles the narrative; still append the structured leaderboard
-        lb_section = _format_leaderboard_section(leaderboard, rotation_next)
-        if lb_section:
-            return enhanced + "\n\n" + lb_section
-        return enhanced
-
-    # Template fallback
     lines = [f"Weekend complete \u2014 Week {week_number}."]
     if winner_names:
         lines.append(f"Won: {', '.join(winner_names)}")
@@ -254,13 +199,6 @@ def _format_leaderboard_section(leaderboard, rotation_next):
 
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
-    context = (
-        "It's Thursday evening. Remind all players that picks are due by 10 PM Friday."
-    )
-    enhanced = llm_client.generate(context, scenario="reminder")
-    if enhanced:
-        return enhanced
-
     return (
         "Good evening, gentlemen.  May I remind you that picks are due "
         "by 10 PM Friday."
@@ -270,14 +208,6 @@ def reminder_thursday():
 def reminder_friday(missing):
     """Friday 7PM reminder to missing players."""
     names = [p["formal_name"] for p in missing]
-    context = (
-        f"It's Friday 7PM. Still waiting on picks from: {_join_names(names)}. "
-        f"3 hours until the deadline. This is the second reminder -- be more impatient."
-    )
-    enhanced = llm_client.generate(context, scenario="reminder")
-    if enhanced:
-        return enhanced
-
     return (
         f"Pardon the interruption.  {_join_names(names)} \u2014 "
         f"3 hours remain to submit your selections."
@@ -287,14 +217,6 @@ def reminder_friday(missing):
 def reminder_final(missing):
     """Friday 9:30PM final warning."""
     names = [p["formal_name"] for p in missing]
-    context = (
-        f"FINAL WARNING. 30 minutes until deadline. Still missing picks from: {_join_names(names)}. "
-        f"This is the last reminder -- be borderline threatening."
-    )
-    enhanced = llm_client.generate(context, scenario="reminder")
-    if enhanced:
-        return enhanced
-
     return (
         f"I do hope you'll forgive the urgency.  {_join_names(names)} \u2014 "
         f"30 minutes remain.  This is the final reminder."
@@ -401,16 +323,8 @@ def picks_display(picks, week_number=None):
 
 
 def _picks_kicker(pick_summaries):
-    """Generate a short one-liner comment on the week's picks."""
-    if not pick_summaries:
-        return None
-    context = (
-        f"Here are this week's picks:\n"
-        + "\n".join(pick_summaries)
-        + "\n\nWrite ONE short punchy reaction to these picks. "
-        + "No more than 10 words. No preamble."
-    )
-    return llm_client.generate(context)
+    """Generate a short one-liner comment on the week's picks. Reserved for shadow/LLM testing."""
+    return None
 
 
 def banter_reply(sender, body, player=None):

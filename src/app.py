@@ -113,9 +113,9 @@ def webhook():
     if not reply and (has_media or _looks_like_bet_placed(body)):
         reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
-    # Banter: respond to Brian (Foley) or direct bot mentions only
-    if not reply and body.strip() and Config.LLM_ENABLED:
-        reply = _try_banter(body, sender, sender_phone)
+    # Banter: disabled in main group for now — shadow mode only
+    # if not reply and body.strip() and Config.LLM_ENABLED:
+    #     reply = _try_banter(body, sender, sender_phone)
 
     if reply:
         send_message(group_id, reply)
