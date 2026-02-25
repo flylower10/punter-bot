@@ -137,6 +137,9 @@ def get_fixtures_by_date_range(start_date, end_date, league_id=None):
     """
     Fetch fixtures between two dates.
 
+    NOTE: Requires league + season params, which need a paid API plan for the
+    current season. Use get_fixtures_by_date() for free-plan-compatible access.
+
     Args:
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)

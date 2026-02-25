@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 
 def fetch_weekend_fixtures():
     """
-    Fetch fixtures for the upcoming weekend (Friday to Monday).
+    Fetch fixtures for tomorrow (and today if not cached).
 
-    Called by the scheduler on Wednesday evening. Fetches from priority leagues
-    to keep within the free tier budget (~3-5 requests per cycle).
+    The API-Football free plan only allows access to today ± 1 day, so we
+    fetch daily instead of pre-fetching the whole weekend. The scheduler
+    runs this Wed–Sun at 7:30PM, building up the weekend fixtures day by day.
 
     Returns:
         int — number of fixtures cached.
@@ -36,27 +37,49 @@ def fetch_weekend_fixtures():
     tz = pytz.timezone(Config.TIMEZONE)
     now = datetime.now(tz)
 
-    # Calculate next Friday to Monday
-    days_to_friday = (4 - now.weekday()) % 7
-    if days_to_friday == 0 and now.hour >= 22:
-        days_to_friday = 7
-    friday = (now + timedelta(days=days_to_friday)).date()
-    monday = friday + timedelta(days=3)
-
-    start_date = friday.isoformat()
-    end_date = monday.isoformat()
-    logger.info("Fetching fixtures for %s to %s", start_date, end_date)
+    today = now.date()
+    tomorrow = today + timedelta(days=1)
 
     total_cached = 0
-    for league_id in PRIORITY_LEAGUES:
-        fixtures = get_fixtures_by_date_range(start_date, end_date, league_id=league_id)
-        if fixtures:
-            cached = _cache_fixtures(fixtures)
-            total_cached += cached
-            logger.info("Cached %d fixtures for league %d", cached, league_id)
+    for target_date in [today, tomorrow]:
+        date_str = target_date.isoformat()
+        cached = _fetch_fixtures_for_date(date_str)
+        total_cached += cached
 
-    logger.info("Total fixtures cached: %d", total_cached)
+    logger.info("Daily fixture fetch: %d fixtures cached (today + tomorrow)", total_cached)
     return total_cached
+
+
+def _fetch_fixtures_for_date(date_str):
+    """
+    Fetch all fixtures for a date, filter to priority leagues, and cache.
+
+    Uses the date-only endpoint (no season param) which works on the free plan.
+    Filters locally by PRIORITY_LEAGUES to avoid caching irrelevant fixtures.
+
+    Args:
+        date_str: Date in YYYY-MM-DD format.
+
+    Returns:
+        int — number of fixtures cached.
+    """
+    priority_set = set(PRIORITY_LEAGUES)
+    all_fixtures = get_fixtures_by_date(date_str)
+    if not all_fixtures:
+        logger.info("No fixtures returned for %s", date_str)
+        return 0
+
+    # Filter to priority leagues only
+    filtered = [
+        f for f in all_fixtures
+        if f.get("league", {}).get("id") in priority_set
+    ]
+    logger.info("Date %s: %d total fixtures, %d in priority leagues",
+                date_str, len(all_fixtures), len(filtered))
+
+    if filtered:
+        return _cache_fixtures(filtered)
+    return 0
 
 
 def _cache_fixtures(api_fixtures):

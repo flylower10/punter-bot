@@ -94,11 +94,12 @@ def init_scheduler(send_message_fn):
         id="close_week",
     )
 
-    # Wednesday 7:30PM — fetch weekend fixtures from API-Football
+    # Daily 7:30PM (Wed–Sun) — fetch tomorrow's fixtures from API-Football
+    # Free plan only allows today ± 1 day, so we fetch daily
     _scheduler.add_job(
         _job_fetch_fixtures,
         "cron",
-        day_of_week="wed",
+        day_of_week="wed,thu,fri,sat,sun",
         hour=19,
         minute=30,
         id="fetch_fixtures",
@@ -346,7 +347,7 @@ def _job_close_week():
 
 
 def _job_fetch_fixtures():
-    """Wednesday 7:30PM: Fetch weekend fixtures from API-Football."""
+    """Daily 7:30PM (Wed-Sun): Fetch today/tomorrow fixtures from API-Football."""
     try:
         from src.services.fixture_service import fetch_weekend_fixtures
         count = fetch_weekend_fixtures()
