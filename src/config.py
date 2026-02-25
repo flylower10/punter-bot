@@ -29,6 +29,11 @@ class Config:
     # Shadow mode: mirror main group messages to this group with LLM responses
     SHADOW_GROUP_ID = os.getenv("SHADOW_GROUP_ID", "")
 
+    # Match monitor: live events + smart auto-resulting (default off for trial)
+    MATCH_MONITOR_ENABLED = os.getenv("MATCH_MONITOR_ENABLED", "false").lower() == "true"
+    # Where match events are posted (shadow group for trial, main group when live)
+    MATCH_MONITOR_GROUP_ID = os.getenv("MATCH_MONITOR_GROUP_ID", "")
+
     # API-Football (free tier: 100 req/day)
     API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
     # The Odds API (free tier: 500 req/month)

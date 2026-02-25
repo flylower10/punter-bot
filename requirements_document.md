@@ -379,10 +379,14 @@ The LLM adds framing only — it never rewrites the structured content (picks li
 - ✅ Group isolation (test/main groups share DB safely)
 - ✅ Pick enrichment (sport, competition, event, market type)
 
-### Should-Have (Phase 3)
+### Should-Have (Phase 3a — Implemented ✅)
+- ✅ Live match events (goals, red cards) posted to group during matches
+- ✅ Smart auto-resulting: per-fixture on match end (replaces fixed cron)
+- ✅ Kickoff batching to stay within API free tier
+
+### Should-Have (Phase 3b)
 - ⚡ Bet slip image reading (Groq Vision)
 - ⚡ Historical trends & analytics
-- ⚡ Live score updates during matches
 
 ### Could-Have (Phase 4+)
 - 💡 Odds movement alerts
@@ -539,10 +543,20 @@ Sunday 6 PM - Result causes 5th consecutive loss
 - The Odds API (market price lookup on pick submission)
 - 92 tests passing
 
-### Phase 3: Enhancements (Planned)
+### Phase 3a: Live Match Events & Smart Auto-Resulting ✅ (Trial Pending)
+- Match monitor service: polls matched fixtures from kickoff through FT
+- Live events: goals and red cards posted to group (⚽, 🟥)
+- Smart auto-resulting: triggers on match end, no waiting for cron
+- Kickoff batching: fixtures sharing a date use single API call
+- Feature-flagged: `MATCH_MONITOR_ENABLED` (default off for trial)
+- Dedup via `fixture_events` table (no duplicate event posts)
+- Startup recovery: re-schedules monitors for unresulted picks on restart
+- Monday 10AM safety sweep kept as catch-all
+- 115 tests passing (up from 92)
+
+### Phase 3b: Enhancements (Planned)
 - Bet slip image reading (Groq Vision)
 - Match start validation — warn or void picks for matches already kicked off
-- Live score updates
 - Historical analytics / Punter Wrapped
 
 ### Phase 4: Refinement (Ongoing)
@@ -566,6 +580,10 @@ Python Backend (Flask)
 ├── Message Parser
 ├── Pick Validator
 ├── Result Tracker (manual + auto-resulting)
+├── Match Monitor (live events + smart auto-resulting)
+│   ├── Polls matched fixtures from kickoff through FT
+│   ├── Posts goals + red cards to group
+│   └── Triggers auto-result on match end
 ├── Penalty Engine
 ├── Rotation Manager
 ├── Stats Calculator
@@ -575,7 +593,7 @@ Python Backend (Flask)
 ├── Pick Enrichment (best-effort, never blocks submission)
 │   ├── Fixture matching (alias → fuzzy → LLM)
 │   └── Market price lookup
-├── Image Reader (Groq Vision — Phase 3)
+├── Image Reader (Groq Vision — Phase 3b)
 └── Command Handler
         ↓
 SQLite Database
@@ -587,17 +605,19 @@ Sports APIs (Live)
 
 ### Key Files
 - `src/app.py` — Flask app, webhook handler, routing, group_id threading
-- `src/butler.py` — All message formatting; templates + LLM framing + banter
+- `src/butler.py` — All message formatting; templates + LLM framing + banter + match events
 - `src/llm_client.py` — Groq API wrapper; `get_framing()`, `generate()`, `reset_persona()`
 - `config/personality.yaml` — Butler character, player profiles, scenario guidance
 - `src/parsers/message_parser.py` — Pick, result, command parsing
 - `src/api/api_football.py` — API-Football v3 client with local file caching
 - `src/api/odds_api.py` — The Odds API client with 2hr cache TTL
-- `src/services/fixture_service.py` — Weekend fixture fetch + DB caching
+- `src/services/fixture_service.py` — Weekend fixture fetch + DB caching + event extraction
 - `src/services/match_service.py` — Three-tier pick-to-fixture matching
+- `src/services/match_monitor_service.py` — Live match events + smart auto-resulting
 - `src/services/auto_result_service.py` — Auto-resulting from completed fixtures
+- `src/services/scheduler.py` — APScheduler jobs + match monitor scheduling
 - `src/services/` — player, week, pick, result, penalty, rotation, stats services
-- `src/schema.sql` — SQLite schema (10 tables)
+- `src/schema.sql` — SQLite schema (11 tables)
 
 ### Data Model (Key Tables)
 
@@ -618,6 +638,8 @@ Sports APIs (Live)
 **vault** — id, penalty_id, amount, description
 
 **rotation_queue** — id, player_id, reason, position, week_added, processed
+
+**fixture_events** — id, fixture_api_id, event_key (dedup), event_type, detail, minute, team, player, posted_at
 
 **bet_slips** — id, week_id, placer_id, total_odds, stake, potential_return, image_path
 
@@ -687,7 +709,16 @@ Sports APIs (Live)
 - [x] Enrichment is best-effort — never blocks pick submission
 - [x] 92 tests passing
 
-### Phase 3 Complete When:
+### Phase 3a Complete When:
+- [x] Match monitor polls fixtures during match windows
+- [x] Goals and red cards posted to group within 10 minutes
+- [x] No duplicate event posts (fixture_events dedup)
+- [x] Auto-result triggers on match end (FT/AET/PEN)
+- [x] API budget stays within 100 req/day on Saturday (kickoff batching)
+- [ ] One successful trial weekend in shadow group
+- [ ] Switched to main group after trial
+
+### Phase 3b Complete When:
 - [ ] Bet slip images read and parsed (Groq Vision)
 - [ ] Odds, stake, return extracted from screenshots
 - [ ] `confirmed_odds` populated on matched picks
@@ -698,11 +729,12 @@ Sports APIs (Live)
 ## 14. Next Steps
 
 ### Immediate (This Week)
-1. Deploy Phase 2 changes to OCI server
-2. Configure `API_FOOTBALL_KEY` and `ODDS_API_KEY` in production `.env`
-3. Monitor enrichment + auto-resulting over first live weekend
+1. Deploy Phase 3a changes to OCI server
+2. Set `MATCH_MONITOR_ENABLED=true` and `MATCH_MONITOR_GROUP_ID=<shadow_group>` in production `.env`
+3. Trial weekend: monitor live events + auto-resulting in shadow group
+4. After successful trial: switch `MATCH_MONITOR_GROUP_ID` to main group
 
-### Near Term (Phase 3)
+### Near Term (Phase 3b)
 - Bet slip image reading (Groq Vision)
 - Match start validation
 - Historical analytics / Punter Wrapped
@@ -815,11 +847,21 @@ Sports APIs (Live)
 - Three odds values per pick: player-submitted, market price, confirmed (bet slip — Phase 3)
 - 92 tests passing (up from 73)
 
-**Next Review:** After first weekend with API enrichment live
+**Version 0.21** — Phase 3a: Live Match Events & Smart Auto-Resulting (2026-02-25)
+- Match monitor service: unified polling loop for events + auto-resulting
+- Live events: goals and red cards posted to group during matches (⚽ / 🟥)
+- Smart auto-resulting: per-fixture on match end, replaces fixed Sun 8PM cron
+- Kickoff batching: fixtures sharing a date use single API call (stays within budget)
+- `fixture_events` table for event dedup
+- Feature-flagged: `MATCH_MONITOR_ENABLED` + `MATCH_MONITOR_GROUP_ID` (trial in shadow group)
+- Startup recovery: re-schedules monitors for unresulted picks on restart
+- 115 tests passing (up from 92)
+
+**Next Review:** After trial weekend with match monitor live in shadow group
 
 ---
 
 **Document Owner:** You (Primary Admin)
 **Stakeholders:** Ed (Co-admin), The Lads (Users)
 **Last Updated:** 2026-02-25
-**Status:** ✅ Phase 2 Complete — Structured data & API integration
+**Status:** ✅ Phase 3a Implemented — Live match events & smart auto-resulting (trial pending)

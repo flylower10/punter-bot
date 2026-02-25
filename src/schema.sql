@@ -115,3 +115,16 @@ CREATE TABLE IF NOT EXISTS bet_slips (
     image_path TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS fixture_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fixture_api_id INTEGER NOT NULL,
+    event_key TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    detail TEXT,
+    minute INTEGER,
+    team TEXT,
+    player TEXT,
+    posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(fixture_api_id, event_key)
+);

@@ -15,6 +15,7 @@ from src.config import Config
 from src.db import get_db
 from src.api.api_football import (
     get_fixtures_by_date_range,
+    get_fixtures_by_date,
     get_fixture_by_id,
     PRIORITY_LEAGUES,
 )
@@ -180,6 +181,77 @@ def refresh_fixture(api_id):
         _cache_fixtures([fixture_data])
         return get_fixture_by_api_id(api_id)
     return None
+
+
+def refresh_fixtures_by_date(date_str):
+    """
+    Re-fetch all fixtures for a given date and update the cache.
+    Used for kickoff batching — one request covers multiple fixtures.
+
+    Args:
+        date_str: Date in YYYY-MM-DD format.
+
+    Returns:
+        int — number of fixtures updated.
+    """
+    fixtures = get_fixtures_by_date(date_str)
+    if fixtures:
+        return _cache_fixtures(fixtures)
+    return 0
+
+
+def extract_events(raw_json):
+    """
+    Parse goal and red card events from an API-Football fixture response.
+
+    Args:
+        raw_json: JSON string or dict of the API-Football fixture data.
+
+    Returns:
+        list of dicts with keys: event_key, event_type, detail, minute, team, player
+    """
+    if isinstance(raw_json, str):
+        try:
+            data = json.loads(raw_json)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    else:
+        data = raw_json
+
+    events_raw = data.get("events", [])
+    if not events_raw:
+        return []
+
+    results = []
+    for ev in events_raw:
+        ev_type = ev.get("type", "")
+        detail = ev.get("detail", "")
+
+        # Only goals and red cards
+        if ev_type == "Goal":
+            event_type = "Goal"
+        elif ev_type == "Card" and detail == "Red Card":
+            event_type = "RedCard"
+        else:
+            continue
+
+        minute = ev.get("time", {}).get("elapsed")
+        team = ev.get("team", {}).get("name", "")
+        player_name = ev.get("player", {}).get("name", "")
+
+        # Build dedup key: "Goal_23_Salah" or "RedCard_68_Rice"
+        event_key = f"{event_type}_{minute}_{player_name}"
+
+        results.append({
+            "event_key": event_key,
+            "event_type": event_type,
+            "detail": detail,
+            "minute": minute,
+            "team": team,
+            "player": player_name,
+        })
+
+    return results
 
 
 def get_fixture_list_for_matching():

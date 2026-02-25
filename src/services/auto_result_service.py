@@ -128,6 +128,108 @@ def auto_result_week(week_id):
     return announcements
 
 
+def auto_result_fixture(api_fixture_id, week_id):
+    """
+    Auto-result the single pick linked to a specific fixture in a given week.
+    Called by the match monitor when a fixture completes.
+
+    Returns:
+        list of announcement strings (0 or 1 items, plus optional week summary).
+    """
+    conn = get_db()
+    pick = conn.execute(
+        "SELECT p.*, pl.nickname, pl.formal_name, pl.emoji, pl.id as player_id "
+        "FROM picks p "
+        "JOIN players pl ON p.player_id = pl.id "
+        "WHERE p.week_id = ? AND p.api_fixture_id = ?",
+        (week_id, api_fixture_id),
+    ).fetchone()
+
+    if not pick:
+        conn.close()
+        return []
+
+    pick = dict(pick)
+
+    # Skip if already resulted
+    existing = conn.execute(
+        "SELECT id FROM results WHERE pick_id = ?", (pick["id"],)
+    ).fetchone()
+    conn.close()
+    if existing:
+        return []
+
+    fixture = get_fixture_by_api_id(api_fixture_id)
+    if not fixture:
+        return []
+
+    if fixture.get("status") not in COMPLETED_STATUSES:
+        return []
+
+    outcome = _evaluate_pick(pick, fixture)
+    if not outcome:
+        logger.warning("Could not evaluate pick %d against fixture %d", pick["id"], api_fixture_id)
+        return []
+
+    # Record the result
+    score_str = f"{fixture.get('home_score', '?')}-{fixture.get('away_score', '?')}"
+    record_result(pick["id"], outcome, confirmed_by="auto")
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE results SET score = ? WHERE pick_id = ?",
+        (score_str, pick["id"]),
+    )
+    conn.commit()
+    conn.close()
+
+    # Build announcement
+    player = {"formal_name": pick["formal_name"], "nickname": pick["nickname"],
+               "emoji": pick.get("emoji", ""), "id": pick["player_id"]}
+
+    streak = get_consecutive_losses(pick["player_id"])
+    streak_str = f"{streak}L" if streak > 0 and outcome == "loss" else None
+
+    announcement = butler.result_announced(
+        player, pick["description"], pick["odds_original"], outcome,
+        streak=streak_str,
+    )
+
+    # Check for penalties
+    penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
+    penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}
+    if streak in penalty_thresholds:
+        suggest_penalty(pick["player_id"], week_id, penalty_thresholds[streak])
+        announcement += "\n\n" + butler.penalty_suggested(
+            player, streak, penalty_thresholds[streak], penalty_amounts[streak]
+        )
+
+    announcements = [announcement]
+    logger.info("Auto-resulted fixture %d: %s — %s (%s)",
+                api_fixture_id, pick["formal_name"], outcome, score_str)
+
+    # Check if all results are now in
+    if all_results_in(week_id):
+        from src.services.result_service import get_week_results
+        results = get_week_results(week_id)
+        complete_week(week_id)
+        leaderboard = get_leaderboard()
+        next_placer = get_next_placer()
+
+        conn = get_db()
+        week = conn.execute("SELECT week_number FROM weeks WHERE id = ?", (week_id,)).fetchone()
+        conn.close()
+        week_number = week["week_number"] if week else "?"
+
+        announcements.append(
+            butler.week_complete_summary(
+                results, week_number, leaderboard or [], next_placer or {}
+            )
+        )
+
+    return announcements
+
+
 def _evaluate_pick(pick, fixture):
     """
     Determine win/loss for a pick based on the fixture score.

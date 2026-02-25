@@ -35,6 +35,7 @@ def _run_migrations(conn):
     """Apply schema migrations for existing databases."""
     _migrate_weeks_group_id(conn)
     _migrate_picks_enrichment(conn)
+    _migrate_fixture_events(conn)
 
 
 def _column_exists(conn, table, column):
@@ -88,6 +89,25 @@ def _migrate_picks_enrichment(conn):
     for col_name, col_type in new_cols:
         if not _column_exists(conn, "picks", col_name):
             conn.execute(f"ALTER TABLE picks ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+
+
+def _migrate_fixture_events(conn):
+    """Create fixture_events table if it doesn't exist."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fixture_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fixture_api_id INTEGER NOT NULL,
+            event_key TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            detail TEXT,
+            minute INTEGER,
+            team TEXT,
+            player TEXT,
+            posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(fixture_api_id, event_key)
+        )
+    """)
     conn.commit()
 
 

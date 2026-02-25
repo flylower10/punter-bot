@@ -354,6 +354,12 @@ def _cmd_resetweek(parsed):
         return "No week to reset. (No open/closed week, and no completed week this season.)"
 
     conn = get_db()
+    # Delete fixture events for picks in this week
+    conn.execute(
+        "DELETE FROM fixture_events WHERE fixture_api_id IN "
+        "(SELECT api_fixture_id FROM picks WHERE week_id = ? AND api_fixture_id IS NOT NULL)",
+        (week["id"],),
+    )
     # Delete results for this week's picks
     conn.execute(
         "DELETE FROM results WHERE pick_id IN (SELECT id FROM picks WHERE week_id = ?)",
@@ -380,6 +386,7 @@ def _cmd_resetseason(parsed):
         return "Only an admin may reset the season."
 
     conn = get_db()
+    conn.execute("DELETE FROM fixture_events")
     conn.execute("DELETE FROM vault")
     conn.execute("DELETE FROM penalties")
     conn.execute("DELETE FROM results")
@@ -827,9 +834,19 @@ def create_app():
     init_db()
     logger.info("Database initialized")
 
-    from src.services.scheduler import init_scheduler
+    from src.services.scheduler import init_scheduler, schedule_monitors_for_week
     init_scheduler(send_message)
     logger.info("Scheduler initialized")
+
+    # On startup, schedule monitors for any unresulted matched picks
+    try:
+        week = get_current_week(
+            group_id=Config.GROUP_CHAT_ID or (Config.GROUP_CHAT_IDS[0] if Config.GROUP_CHAT_IDS else "default")
+        )
+        if week:
+            schedule_monitors_for_week(week["id"])
+    except Exception:
+        logger.exception("Failed to schedule startup monitors")
 
     return app
 

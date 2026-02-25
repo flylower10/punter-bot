@@ -384,6 +384,25 @@ def _emoji_name(player):
     return f"{prefix}{player['formal_name']}"
 
 
+def match_event(event_type, home_team, away_team, home_score, away_score, player_name, minute, detail=None):
+    """Format a live match event (goal or red card) for posting."""
+    score = f"{home_team} {home_score}-{away_score} {away_team}"
+    if event_type == "Goal":
+        suffix = ""
+        if detail and detail != "Normal Goal":
+            suffix = f" ({detail})"
+        return f"\u26bd {score} \u2014 {player_name} {minute}'{suffix}"
+    elif event_type == "RedCard":
+        # Find which team the player is on
+        return f"\U0001f7e5 {score} \u2014 {player_name} {minute}' (Red Card)"
+    return ""
+
+
+def match_ended(home_team, away_team, home_score, away_score):
+    """Format a full-time score line."""
+    return f"FT: {home_team} {home_score}-{away_score} {away_team}"
+
+
 def help_text():
     """Format the help message."""
     return (

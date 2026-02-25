@@ -105,6 +105,8 @@ cd ~/punter-bot && git pull && pm2 restart all
 - `API_FOOTBALL_KEY` — API-Football key (free tier: 100 req/day)
 - `ODDS_API_KEY` — The Odds API key (free tier: 500 req/month)
 - `SHADOW_GROUP_ID` — test group ID for shadow mode (LLM preview without affecting main group)
+- `MATCH_MONITOR_ENABLED=false` — set to `true` to enable live match events + smart auto-resulting
+- `MATCH_MONITOR_GROUP_ID` — group ID for match event posts (shadow group for trial, main group when live)
 - See `MAIN_GROUP_READY.md` for the launch checklist
 
 ## LLM Personality
@@ -143,17 +145,19 @@ punter-bot/
 │   ├── llm_client.py      # Groq API wrapper + persona management
 │   ├── config.py          # Environment config
 │   ├── db.py              # Database helpers + migrations
-│   ├── schema.sql         # SQLite schema (10 tables)
+│   ├── schema.sql         # SQLite schema (11 tables)
 │   ├── api/               # External API clients
-│   │   ├── api_football.py  # API-Football v3 (fixtures, scores)
+│   │   ├── api_football.py  # API-Football v3 (fixtures, scores, events)
 │   │   └── odds_api.py      # The Odds API (market prices)
 │   ├── parsers/
 │   │   └── message_parser.py
 │   └── services/          # Business logic
-│       ├── fixture_service.py   # Weekend fixture caching
-│       ├── match_service.py     # Pick-to-fixture matching (alias → fuzzy → LLM)
-│       ├── auto_result_service.py  # Auto-resulting from completed fixtures
-│       └── ...                  # picks, results, stats, rotation, etc.
+│       ├── fixture_service.py       # Weekend fixture caching + event extraction
+│       ├── match_service.py         # Pick-to-fixture matching (alias → fuzzy → LLM)
+│       ├── auto_result_service.py   # Auto-resulting from completed fixtures
+│       ├── match_monitor_service.py # Live match events + smart auto-resulting
+│       ├── scheduler.py             # APScheduler jobs + match monitor scheduling
+│       └── ...                      # picks, results, stats, rotation, etc.
 ├── scripts/
 │   ├── health_check.py    # Health monitor + Telegram alerts
 │   └── restart.sh

@@ -99,12 +99,29 @@ Reference for MVP testing. Update status as flows are confirmed.
 
 ---
 
-## Not in scope (Phase 2+)
+## Match monitor flows (Phase 3)
+
+| # | Flow | Status | Notes |
+|---|------|--------|-------|
+| 43 | **Goal event posted** — Goal scored in monitored fixture → bot posts `⚽ Liverpool 1-0 Arsenal — Salah 23'` to monitor group | ⏳ | Trial weekend |
+| 44 | **Red card event posted** — Red card in monitored fixture → bot posts `🟥` event to monitor group | ⏳ | Trial weekend |
+| 45 | **No duplicate events** — Same goal polled twice → only posted once (fixture_events dedup) | ✅ | Unit tested |
+| 46 | **FT triggers auto-result** — Match finishes → bot posts FT score and auto-results the linked pick | ⏳ | Trial weekend |
+| 47 | **Manual result before auto-result** — Admin results a pick before match ends → auto-result skips it | ✅ | Unit tested |
+| 48 | **Monitor scheduled on pick submit** — Pick matched to fixture → monitor scheduled at kickoff | ⏳ | |
+| 49 | **Startup recovery** — Flask restarts during a match → monitors re-scheduled for unresulted picks | ⏳ | |
+| 50 | **Monday night game** — Pick for Monday fixture → monitor runs Monday evening | ⏳ | |
+| 51 | **API budget Saturday** — Batched polling stays within 100 req/day | ⏳ | Check Flask logs |
+| 52 | **Monitor disabled** — `MATCH_MONITOR_ENABLED=false` → no polling, no events posted | ✅ | Unit tested |
+
+---
+
+## Not in scope (Phase 3b+)
 
 | # | Flow | Status |
 |---|------|--------|
-| — | **Bet slip image reading** — OCR and parsing of bet slip screenshots | ⬜ Phase 2 |
-| — | **DM reminders** — Individual DMs to missing players at 9:30PM | ⬜ Phase 2 |
+| — | **Bet slip image reading** — OCR and parsing of bet slip screenshots | ⬜ Phase 3b |
+| — | **DM reminders** — Individual DMs to missing players at 9:30PM | ⬜ Phase 3b |
 
 ---
 
@@ -120,6 +137,6 @@ Reference for MVP testing. Update status as flows are confirmed.
 
 ## Version
 
-- **Document:** Testing plan v0.11
-- **Requirements:** See `requirements_document.md` (Version 0.14)
-- **Last updated:** 2026-02-17
+- **Document:** Testing plan v0.12
+- **Requirements:** See `requirements_document.md` (Version 0.21)
+- **Last updated:** 2026-02-25

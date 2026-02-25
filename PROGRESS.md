@@ -70,14 +70,16 @@
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **Tests**: 92 passing (31 parser + 61 service/integration tests)
+- **Tests**: 115 passing (31 parser + 84 service/integration tests)
 - **Phase 2 complete**: Structured data, API integration, auto-resulting, market prices
+- **Phase 3a implemented**: Live match events + smart auto-resulting (trial pending)
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
 - **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content
 - **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
 - **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
-- **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, auto-resulting (Sun 8PM, Mon 10AM)
+- **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
+- **Match monitor**: Live events (goals, red cards) + auto-result on match end; feature-flagged `MATCH_MONITOR_ENABLED`
 - **The Odds API**: Market price lookup on pick submission (best-effort)
 - **Friday reminder**: Updated to 7PM
 
@@ -197,7 +199,8 @@ pm2 restart all
 - [x] Handles win, BTTS, over/under, HT/FT bet types
 - [x] Checks matched picks against completed fixtures (API-Football scores)
 - [x] Records results, checks penalty streaks, builds butler-voiced announcements
-- [x] Scheduler jobs: Sun 8PM + Mon 10AM
+- [x] Single-fixture auto-resulting via `auto_result_fixture()` (used by match monitor)
+- [x] Scheduler: Monday 10AM safety sweep (replaces fixed Sun 8PM + Mon 10AM)
 
 ### Step 3: The Odds API (2026-02-25)
 - [x] `src/api/odds_api.py` — batch odds fetch with 2hr cache TTL
@@ -210,7 +213,51 @@ pm2 restart all
 - [x] Test fixtures updated (conftest.py)
 - [x] 92 tests passing (up from 73)
 
-## Phase 3: Enhancements [PLANNED]
+## Phase 3: Live Match Events & Smart Auto-Resulting [IN PROGRESS]
+
+### Step 1: Match Monitor Service (2026-02-25)
+- [x] `src/services/match_monitor_service.py` — unified polling loop (events + auto-resulting)
+- [x] Polls matched fixtures from kickoff through FT (every 10 min live, every 30 min extra time)
+- [x] Extracts goals and red cards from API-Football `events` data
+- [x] Posts live events to group: `⚽ Liverpool 1-0 Arsenal — Salah 23'`
+- [x] Posts final score on match end: `FT: Liverpool 2-1 Arsenal`
+- [x] Triggers auto-result immediately on FT (no waiting for cron)
+- [x] Kickoff batching: fixtures sharing a date use single API call (essential for budget)
+- [x] New `fixture_events` table for dedup (prevents duplicate event posts)
+- [x] `extract_events(raw_json)` in fixture_service — parses goals + red cards
+- [x] `match_event()` and `match_ended()` butler templates
+
+### Step 2: Scheduler Integration (2026-02-25)
+- [x] `schedule_match_monitor(fixture_api_id, kickoff, week_id)` — date-triggered polling
+- [x] Scheduled automatically when a pick is matched to a fixture (via pick_service)
+- [x] Startup recovery: `schedule_monitors_for_week()` re-schedules unresulted picks on restart
+- [x] Removed Sunday 8PM cron job (replaced by per-fixture monitoring)
+- [x] Kept Monday 10AM safety sweep (catches anything missed)
+
+### Step 3: Config & Testing (2026-02-25)
+- [x] `MATCH_MONITOR_ENABLED` config flag (default `false` — trial mode)
+- [x] `MATCH_MONITOR_GROUP_ID` — events posted to shadow group during trial
+- [x] 115 tests passing (23 new: event extraction, dedup, auto-result, butler templates, polling)
+- [x] `fixture_events` cleaned up in `!resetweek` and `!resetseason`
+
+### Trial Plan
+- [ ] Deploy to server with `MATCH_MONITOR_ENABLED=true`, `MATCH_MONITOR_GROUP_ID=<shadow_group>`
+- [ ] Monitor one trial weekend (events + auto-resulting to test group only)
+- [ ] Validate: events within 10 min, no duplicates, API budget < 100 req/day on Saturday
+- [ ] After successful trial: switch `MATCH_MONITOR_GROUP_ID` to main group
+
+### API Budget (with kickoff batching)
+| Scenario | Requests | Notes |
+|----------|----------|-------|
+| Wed fixture fetch | ~14 | 14 priority leagues |
+| Pick enrichment (Thu-Fri) | ~6-12 | Match + odds lookup |
+| Match monitoring (Sat) | ~30-40 | Batched by kickoff time |
+| Match monitoring (Sun) | ~15-25 | Fewer fixtures |
+| Match monitoring (Mon) | ~10-15 | If Monday night picks |
+| Monday 10AM sweep | ~5 | Safety net |
+| **Daily peak (Saturday)** | **~50-65** | Comfortable with batching |
+
+## Phase 3b: Enhancements [PLANNED]
 
 ### Bet Slip Reader
 - [ ] Bridge downloads image via `message.downloadMedia()`
@@ -220,11 +267,10 @@ pm2 restart all
 
 ### Other
 - [ ] **Match start validation** — warn on picks for matches already kicked off
-- [ ] Live score updates
 - [ ] Historical analytics / Punter Wrapped
 - [ ] Web dashboard (low priority)
 
 ---
 
 **Last Updated:** 2026-02-25
-**Status:** ✅ Phase 2 Complete — Structured data & API integration
+**Status:** ✅ Phase 3a Implemented — Live match events & smart auto-resulting (trial pending)

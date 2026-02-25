@@ -77,6 +77,9 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
     ).fetchone()
     conn.close()
 
+    # Schedule match monitor if pick was matched to a fixture
+    _try_schedule_monitor(enrichment, week_id)
+
     return dict(pick), is_update, changed, previous_description
 
 
@@ -109,6 +112,21 @@ def _try_enrich(description, bet_type):
     except Exception as e:
         logger.warning("Enrichment failed (non-blocking): %s", e)
     return {}
+
+
+def _try_schedule_monitor(enrichment, week_id):
+    """Schedule a match monitor for this pick's fixture, if matched."""
+    api_fixture_id = enrichment.get("api_fixture_id")
+    if not api_fixture_id:
+        return
+    try:
+        from src.services.fixture_service import get_fixture_by_api_id
+        fixture = get_fixture_by_api_id(api_fixture_id)
+        if fixture and fixture.get("kickoff"):
+            from src.services.scheduler import schedule_match_monitor
+            schedule_match_monitor(api_fixture_id, fixture["kickoff"], week_id)
+    except Exception as e:
+        logger.warning("Failed to schedule match monitor (non-blocking): %s", e)
 
 
 def update_pick_market_price(pick_id, market_price):

@@ -1,12 +1,16 @@
 """
 Scheduled jobs for The Betting Butler.
 
-Uses APScheduler to run timed reminders and deadline enforcement.
+Uses APScheduler to run timed reminders, deadline enforcement,
+and match monitoring (live events + smart auto-resulting).
 All times are in Europe/Dublin timezone.
 """
 
 import logging
+from collections import defaultdict
+from datetime import datetime, timedelta
 
+import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from src.config import Config
@@ -20,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 _scheduler = None
 _send_fn = None
+
+# Polling intervals
+POLL_INTERVAL_LIVE = 10     # minutes — during match window
+POLL_INTERVAL_EXTRA = 30    # minutes — after expected FT (extra time/delays)
+MATCH_WINDOW_HOURS = 2.5    # hours after kickoff when we expect FT
+EXTRA_TIME_HOURS = 1        # extra polling window after match window
 
 
 def init_scheduler(send_message_fn):
@@ -94,17 +104,7 @@ def init_scheduler(send_message_fn):
         id="fetch_fixtures",
     )
 
-    # Sunday 8PM — check for completed fixtures and auto-result
-    _scheduler.add_job(
-        _job_auto_result,
-        "cron",
-        day_of_week="sun",
-        hour=20,
-        minute=0,
-        id="auto_result_sunday",
-    )
-
-    # Monday 10AM — second auto-result pass (Monday night games)
+    # Monday 10AM — safety sweep auto-result (catches anything missed)
     _scheduler.add_job(
         _job_auto_result,
         "cron",
@@ -116,6 +116,156 @@ def init_scheduler(send_message_fn):
 
     _scheduler.start()
     logger.info("Scheduler started with %d jobs", len(_scheduler.get_jobs()))
+
+
+def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id):
+    """
+    Schedule polling jobs for a fixture's match window.
+
+    Creates interval jobs that poll the fixture from kickoff through
+    kickoff + 2.5h (every 10 min), then kickoff + 3.5h (every 30 min).
+
+    If kickoff is in the past, schedules immediately at the appropriate interval.
+
+    Args:
+        fixture_api_id: API-Football fixture ID.
+        kickoff_iso: ISO-format kickoff timestamp.
+        week_id: current week ID.
+    """
+    if not Config.MATCH_MONITOR_ENABLED:
+        logger.debug("Match monitor disabled, not scheduling fixture %s", fixture_api_id)
+        return
+
+    if not _scheduler:
+        logger.warning("Scheduler not initialized, cannot schedule monitor")
+        return
+
+    tz = pytz.timezone(Config.TIMEZONE)
+    try:
+        kickoff = datetime.fromisoformat(kickoff_iso)
+        if kickoff.tzinfo is None:
+            kickoff = tz.localize(kickoff)
+    except (ValueError, TypeError):
+        logger.warning("Invalid kickoff time: %s", kickoff_iso)
+        return
+
+    now = datetime.now(tz)
+    match_end = kickoff + timedelta(hours=MATCH_WINDOW_HOURS)
+    extra_end = match_end + timedelta(hours=EXTRA_TIME_HOURS)
+
+    # Don't schedule if the match window has fully passed
+    if now > extra_end:
+        logger.info("Fixture %s past monitoring window, skipping", fixture_api_id)
+        return
+
+    job_id = f"monitor_{fixture_api_id}_{week_id}"
+
+    # Remove existing job for this fixture if any
+    existing = _scheduler.get_job(job_id)
+    if existing:
+        logger.info("Monitor already scheduled for fixture %s", fixture_api_id)
+        return
+
+    # Schedule the first poll
+    if now < kickoff:
+        # Match hasn't started — first poll at kickoff
+        start_time = kickoff
+    else:
+        # Match is already underway — poll immediately
+        start_time = now + timedelta(seconds=30)
+
+    _scheduler.add_job(
+        _job_monitor_fixture,
+        "date",
+        run_date=start_time,
+        args=[fixture_api_id, week_id, 0],
+        id=job_id,
+    )
+    logger.info("Scheduled monitor for fixture %s at %s (week %s)",
+                fixture_api_id, start_time.isoformat(), week_id)
+
+
+def schedule_monitors_for_week(week_id):
+    """
+    Schedule monitors for all unresulted matched picks in a week.
+    Called on startup to recover from restarts.
+    """
+    if not Config.MATCH_MONITOR_ENABLED:
+        return
+
+    from src.services.match_monitor_service import get_unresulted_picks_for_week
+    picks = get_unresulted_picks_for_week(week_id)
+
+    for pick in picks:
+        schedule_match_monitor(pick["api_fixture_id"], pick["kickoff"], week_id)
+
+    if picks:
+        logger.info("Startup: scheduled %d match monitors for week %s", len(picks), week_id)
+
+
+def _job_monitor_fixture(fixture_api_id, week_id, poll_count):
+    """
+    Single poll of a fixture. Posts events, checks for FT, and
+    reschedules the next poll if the match isn't finished.
+    """
+    try:
+        from src.services.match_monitor_service import poll_fixtures
+        results = poll_fixtures([fixture_api_id], week_id, _send_fn)
+        status = results.get(fixture_api_id, "error")
+
+        tz = pytz.timezone(Config.TIMEZONE)
+        now = datetime.now(tz)
+
+        if status == "completed":
+            logger.info("Fixture %s completed, monitor done", fixture_api_id)
+            return
+
+        if status == "skipped":
+            return
+
+        # Determine next poll interval
+        from src.services.fixture_service import get_fixture_by_api_id
+        fixture = get_fixture_by_api_id(fixture_api_id)
+        if fixture and fixture.get("kickoff"):
+            try:
+                kickoff = datetime.fromisoformat(fixture["kickoff"])
+                if kickoff.tzinfo is None:
+                    kickoff = tz.localize(kickoff)
+            except (ValueError, TypeError):
+                kickoff = now - timedelta(hours=2)
+
+            match_end = kickoff + timedelta(hours=MATCH_WINDOW_HOURS)
+            extra_end = match_end + timedelta(hours=EXTRA_TIME_HOURS)
+
+            if now > extra_end:
+                logger.info("Fixture %s past extra time window, stopping monitor", fixture_api_id)
+                return
+
+            if now > match_end:
+                interval = POLL_INTERVAL_EXTRA
+            else:
+                interval = POLL_INTERVAL_LIVE
+        else:
+            interval = POLL_INTERVAL_LIVE
+
+        # Schedule next poll
+        next_poll = now + timedelta(minutes=interval)
+        next_count = poll_count + 1
+        job_id = f"monitor_{fixture_api_id}_{week_id}"
+
+        _scheduler.add_job(
+            _job_monitor_fixture,
+            "date",
+            run_date=next_poll,
+            args=[fixture_api_id, week_id, next_count],
+            id=job_id,
+            replace_existing=True,
+        )
+        logger.debug("Next poll for fixture %s at %s (poll #%d)",
+                      fixture_api_id, next_poll.isoformat(), next_count)
+
+    except Exception:
+        logger.exception("Error in monitor job for fixture %s", fixture_api_id)
 
 
 def _main_group_id():
@@ -206,7 +356,7 @@ def _job_fetch_fixtures():
 
 
 def _job_auto_result():
-    """Sunday 8PM / Monday 10AM: Auto-result matched picks from completed fixtures."""
+    """Monday 10AM: Safety sweep — auto-result any remaining matched picks."""
     try:
         from src.services.auto_result_service import auto_result_week
         week = get_current_week(group_id=_main_group_id())
@@ -215,7 +365,6 @@ def _job_auto_result():
 
         results = auto_result_week(week["id"])
         if results:
-            # Build and send result announcements
             for announcement in results:
                 _send(announcement)
             logger.info("Auto-resulted %d picks", len(results))
