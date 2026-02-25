@@ -49,6 +49,7 @@ def _migrate_weeks_group_id(conn):
         return
 
     conn.executescript("""
+        DROP TABLE IF EXISTS weeks_new;
         CREATE TABLE weeks_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             week_number INTEGER NOT NULL,
