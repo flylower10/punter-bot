@@ -4,7 +4,7 @@
 
 - [x] Git repo initialized
 - [x] Python venv + dependencies (flask, python-dotenv, requests, pytest, pytz, apscheduler)
-- [x] SQLite schema (8 tables: players, weeks, picks, results, penalties, vault, rotation_queue, bet_slips)
+- [x] SQLite schema (11 tables: players, weeks, picks, results, penalties, vault, rotation_queue, bet_slips, fixtures, team_aliases, fixture_events)
 - [x] Database helper module (init_db, get_db, seed_players)
 - [x] Flask app with /webhook and /health endpoints
 - [x] Message parser (commands, picks, results, general)
@@ -70,17 +70,19 @@
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **Tests**: 115 passing (31 parser + 84 service/integration tests)
+- **Tests**: 140 passing (65 parser + 75 service/integration tests)
 - **Phase 2 complete**: Structured data, API integration, auto-resulting, market prices
 - **Phase 3a implemented**: Live match events + smart auto-resulting (trial pending)
+- **Phase 4 complete**: Multi-sport support (12 sports detected, fixture/odds/auto-result wired up)
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
 - **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content
 - **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
 - **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
 - **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
+- **Multi-sport**: Sport detection on every pick, sport-aware matching/aliases/odds; non-football API keys not yet configured
 - **Match monitor**: Live events (goals, red cards) + auto-result on match end; feature-flagged `MATCH_MONITOR_ENABLED`
-- **The Odds API**: Market price lookup on pick submission (best-effort)
+- **The Odds API**: Market price lookup on pick submission (best-effort, covers all 12 sports)
 - **Friday reminder**: Updated to 7PM
 
 ## Phase 0.5: Cloud Migration [LIVE]
@@ -257,6 +259,81 @@ pm2 restart all
 | Monday 10AM sweep | ~5 | Safety net |
 | **Daily peak (Saturday)** | **~50-65** | Comfortable with batching |
 
+## Phase 4: Multi-Sport Support [COMPLETE]
+
+### Sport Detection & Storage (2026-02-25)
+- [x] `detect_sport()` in message_parser.py — keyword-based detection for 12 sports
+- [x] Keywords: rugby, NFL, NBA, NHL, MMA, tennis, golf, boxing, darts, GAA, horse racing
+- [x] Default → "football" when no sport keywords found
+- [x] Every pick now has a `sport` field (parser detects, enrichment overrides if matched)
+- [x] `submit_pick()` accepts `sport` parameter, passed from parser through app.py
+- [x] 25 new sport detection tests
+
+### Sport-Aware Aliases (2026-02-25)
+- [x] `sport` column added to `team_aliases` table with `UNIQUE(alias, sport)` constraint
+- [x] Migration: recreates table with new constraint (existing aliases get `sport='football'`)
+- [x] Seeded: rugby (provinces, Six Nations), NFL abbreviations, NBA abbreviations
+- [x] `_resolve_alias()` tries sport-specific alias first, falls back to any sport
+- [x] Butler `PICK_ABBREVIATIONS` expanded with NFL/NBA abbreviations
+
+### Generic API-Sports Client (2026-02-25)
+- [x] `src/api/api_sports.py` — unified client for rugby, NFL, NBA, NHL, MMA
+- [x] Config dict maps sport → base URL + API key config name
+- [x] Same caching pattern as `api_football.py`
+- [x] `normalize_fixture()` converts sport-specific responses to standard format
+- [x] Skips silently if API key not configured for a sport
+
+### Multi-Sport Fixture Fetching (2026-02-25)
+- [x] `_cache_fixtures()` accepts `sport` parameter
+- [x] `cache_normalized_fixtures()` for pre-normalized non-football fixtures
+- [x] `fetch_weekend_fixtures()` loops through all configured sports
+- [x] `get_upcoming_fixtures()` accepts optional `sport` filter
+- [x] Football still uses existing `api_football.py` (don't break what works)
+- [x] Scheduler's daily fetch job already calls updated `fetch_weekend_fixtures()`
+
+### Sport-Aware Matching & Odds (2026-02-25)
+- [x] `match_pick()` accepts `sport` parameter, filters fixtures by sport
+- [x] LLM prompt includes sport context: "This is a {sport} pick"
+- [x] Odds API extended with rugby, NFL, NBA, NHL, MMA, tennis, golf, boxing sport keys
+- [x] `SPORT_PRIORITY_KEYS` map — sport-specific search order for odds lookup
+- [x] `find_market_price()` and `get_best_odds_for_selection()` accept sport parameter
+
+### Sport-Aware Auto-Resulting (2026-02-25)
+- [x] `_evaluate_pick()` skips BTTS/HT-FT for non-football sports
+- [x] `_evaluate_handicap()` added — works across all team sports
+- [x] `_team_in_text()` strips sport-specific suffixes (" rugby", " rfc", " sc", " cf")
+
+### Odds-Only Enrichment (2026-02-25)
+- [x] Tennis, golf, boxing skip fixture matching entirely
+- [x] `_try_enrich_odds_only()` queries Odds API directly for market prices
+- [x] Stores `market_price` without `api_fixture_id`
+
+### Config (2026-02-25)
+- [x] `API_RUGBY_KEY`, `API_NFL_KEY`, `API_NBA_KEY`, `API_NHL_KEY`, `API_MMA_KEY` in config.py
+- [x] All default to empty string (disabled until API keys configured on server)
+- [x] conftest.py updated to monkeypatch all new keys
+
+### API Coverage
+
+| Sport | Fixtures | Odds | Auto-Result |
+|-------|----------|------|-------------|
+| Football | ✅ API-Football | ✅ | ✅ Done |
+| Rugby | ✅ API-Sports | ✅ | ✅ Ready (needs API key) |
+| NFL | ✅ API-Sports | ✅ | ✅ Ready (needs API key) |
+| NBA | ✅ API-Sports | ✅ | ✅ Ready (needs API key) |
+| NHL | ✅ API-Sports | ✅ | ✅ Ready (needs API key) |
+| MMA/UFC | ✅ API-Sports | ✅ | Partial (fighter matching TBD) |
+| Tennis | ❌ | ✅ | Prices only |
+| Golf | ❌ | ✅ | Prices only |
+| Boxing | ❌ | ✅ | Prices only |
+| Darts | ❌ | ❌ | Manual only |
+| GAA | ❌ | ❌ | Manual only |
+| Horse Racing | ❌ | ❌ | Manual only |
+
+### Remaining
+- [ ] MMA/UFC fighter-specific resulting (fighter A beat fighter B, not team scores)
+- [ ] Configure sport API keys on server when ready (rugby first for Six Nations)
+
 ## Phase 3b: Enhancements [PLANNED]
 
 ### Bet Slip Reader
@@ -273,4 +350,4 @@ pm2 restart all
 ---
 
 **Last Updated:** 2026-02-25
-**Status:** ✅ Phase 3a Implemented — Live match events & smart auto-resulting (trial pending)
+**Status:** ✅ Phase 4 Complete — Multi-sport support (12 sports detected, fixture/odds/auto-result ready)
