@@ -91,8 +91,12 @@ def pick_confirmed(player, description, odds, is_update=False, placer=None, prev
         body = f"{_strip_odds_for_display(formal)} @ {odds}."
     if is_update and previous_description:
         previous_display = _strip_odds_for_display(_formalize_pick(previous_description))
-        return f"{action}, {player['formal_name']}.  Replacing {previous_display} with {body}"
-    return f"{action}, {player['formal_name']}.  {body}"
+        template = f"{action}, {player['formal_name']}.  Replacing {previous_display} with {body}"
+    else:
+        template = f"{action}, {player['formal_name']}.  {body}"
+
+    context = f"{player['formal_name']}'s pick recorded: {_strip_odds_for_display(formal)} @ {odds}."
+    return _frame(template, context, scenario="pick_confirmed", player_name=_first_name(player))
 
 
 def picks_status(submitted, missing):
@@ -124,17 +128,28 @@ def result_announced(player, description, odds, outcome, streak=None):
     if outcome == "win":
         verdict = "\u2705 Winner."
         prefix = "I'm pleased to report"
+        scenario = "result_win"
     elif outcome == "loss":
         verdict = "\u274c Lost."
         prefix = "I'm afraid"
+        if streak and streak.endswith("L"):
+            streak_num = int(streak[:-1])
+            scenario = f"result_streak_{streak_num}" if streak_num in (3, 5, 7) else "result_loss"
+        else:
+            scenario = "result_loss"
     else:
         verdict = "Void."
         prefix = "I must inform you"
+        scenario = "result_loss"
 
-    return (
+    template = (
         f"{prefix} \u2014 {player['formal_name']}'s selection: "
         f"{display_text} @ {odds}.  {verdict}"
     )
+
+    streak_ctx = f" ({streak} streak)" if streak else ""
+    context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}"
+    return _frame(template, context, scenario=scenario, player_name=_first_name(player))
 
 
 def penalty_suggested(player, streak_count, penalty_type, amount):
@@ -219,28 +234,34 @@ def _format_leaderboard_section(leaderboard, rotation_next):
 
 def reminder_thursday():
     """Thursday 7PM reminder to all players."""
-    return (
+    template = (
         "Good evening, gentlemen.  May I remind you that picks are due "
         "by 10 PM Friday."
     )
+    return _frame(template, "Thursday evening reminder — picks due by Friday 10PM.",
+                  scenario="reminder_thursday")
 
 
 def reminder_friday(missing):
     """Friday 7PM reminder to missing players."""
     names = [p["formal_name"] for p in missing]
-    return (
+    template = (
         f"Pardon the interruption.  {_join_names(names)} \u2014 "
         f"3 hours remain to submit your selections."
     )
+    return _frame(template, f"Friday 7PM reminder — {_join_names(names)} still missing.",
+                  scenario="reminder_friday")
 
 
 def reminder_final(missing):
     """Friday 9:30PM final warning."""
     names = [p["formal_name"] for p in missing]
-    return (
+    template = (
         f"I do hope you'll forgive the urgency.  {_join_names(names)} \u2014 "
         f"30 minutes remain.  This is the final reminder."
     )
+    return _frame(template, f"Final warning — 30 minutes. {_join_names(names)} still missing.",
+                  scenario="reminder_final")
 
 
 def rotation_display(next_placer, queue, last_placer=None, last_week=None):
