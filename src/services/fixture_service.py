@@ -47,6 +47,20 @@ def fetch_weekend_fixtures():
         total_cached += cached
 
     logger.info("Daily fixture fetch: %d fixtures cached (today + tomorrow)", total_cached)
+
+    # Re-enrich any unmatched picks now that new fixtures are available
+    if total_cached > 0:
+        try:
+            from src.services.week_service import get_current_week
+            week = get_current_week()
+            if week:
+                from src.services.pick_service import re_enrich_unmatched_picks
+                enriched = re_enrich_unmatched_picks(week["id"])
+                if enriched:
+                    logger.info("Re-enriched %d picks after fixture fetch", enriched)
+        except Exception as e:
+            logger.warning("Re-enrichment failed (non-blocking): %s", e)
+
     return total_cached
 
 

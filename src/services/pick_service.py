@@ -129,6 +129,53 @@ def _try_schedule_monitor(enrichment, week_id):
         logger.warning("Failed to schedule match monitor (non-blocking): %s", e)
 
 
+def re_enrich_unmatched_picks(week_id):
+    """
+    Re-try enrichment for picks that haven't been matched to a fixture yet.
+
+    Called after new fixtures are fetched — picks submitted before the fixture
+    was cached get a second chance at matching. Also schedules match monitors
+    for any newly matched picks.
+
+    Returns:
+        int — number of picks enriched.
+    """
+    conn = get_db()
+    unmatched = conn.execute(
+        "SELECT id, description, bet_type FROM picks "
+        "WHERE week_id = ? AND api_fixture_id IS NULL",
+        (week_id,),
+    ).fetchall()
+    conn.close()
+
+    if not unmatched:
+        return 0
+
+    enriched = 0
+    for pick in unmatched:
+        enrichment = _try_enrich(pick["description"], pick["bet_type"])
+        if enrichment.get("api_fixture_id"):
+            conn = get_db()
+            conn.execute(
+                "UPDATE picks SET sport = ?, competition = ?, event_name = ?, "
+                "market_type = ?, api_fixture_id = ?, market_price = ? "
+                "WHERE id = ?",
+                (enrichment.get("sport"), enrichment.get("competition"),
+                 enrichment.get("event_name"), enrichment.get("market_type"),
+                 enrichment.get("api_fixture_id"), enrichment.get("market_price"),
+                 pick["id"]),
+            )
+            conn.commit()
+            conn.close()
+            _try_schedule_monitor(enrichment, week_id)
+            enriched += 1
+            logger.info("Re-enriched pick %d: %s → %s",
+                        pick["id"], pick["description"][:40],
+                        enrichment.get("event_name", "?"))
+
+    return enriched
+
+
 def update_pick_market_price(pick_id, market_price):
     """Update the market_price on a pick (from The Odds API)."""
     conn = get_db()

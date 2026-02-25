@@ -136,10 +136,7 @@ def _process_fixture(api_id, week_id, send_fn, target_group):
         # Trigger auto-result for the pick linked to this fixture
         announcements = auto_result_fixture(api_id, week_id)
         for msg in announcements:
-            # Auto-result announcements go to main group (existing behaviour)
-            main_group = Config.GROUP_CHAT_ID
-            if main_group:
-                send_fn(main_group, msg)
+            send_fn(target_group, msg)
 
         return "completed"
 
