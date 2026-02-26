@@ -511,8 +511,9 @@ def handle_cumulative_picks(cumulative):
         replies.append(butler.picks_status(None, missing))
     elif all_picks_in(week["id"]):
         placer = get_next_placer()
+        picks = get_picks_for_week(week["id"])
         if placer:
-            replies.append(butler.all_picks_in(placer))
+            replies.append(butler.all_picks_in(placer, picks=picks))
         else:
             replies.append("All selections have been received.")
 
@@ -563,10 +564,11 @@ def handle_pick(parsed):
     if missing:
         reply += "\n" + butler.picks_status(None, missing)
     elif all_picks_in(week["id"]):
-        # All picks are in — announce the placer
+        # All picks are in — announce the placer with summary
         placer = get_next_placer()
+        picks = get_picks_for_week(week["id"])
         if placer:
-            reply += "\n" + butler.all_picks_in(placer)
+            reply += "\n" + butler.all_picks_in(placer, picks=picks)
         else:
             reply += "\nAll selections have been received."
 

@@ -119,12 +119,23 @@ def picks_status(submitted, missing):
     return f"Awaiting selection from:\n{missing_lines}"
 
 
-def all_picks_in(placer):
-    """Announce all picks are in and who places the bet."""
-    return (
+def all_picks_in(placer, picks=None):
+    """Announce all picks are in, who places the bet, and list all selections."""
+    header = (
         f"All selections have been received.  "
         f"{placer['formal_name']}, you are next in the rotation to place the wager."
     )
+    if not picks:
+        return header
+    lines = []
+    for pick in picks:
+        emoji = _primary_emoji(pick.get("emoji", ""))
+        prefix = f"{emoji} " if emoji else ""
+        formal = _formalize_pick(pick.get("description", ""))
+        display = _strip_odds_for_display(formal)
+        odds = pick.get("odds_original", "")
+        lines.append(f"{prefix}{pick['formal_name']} — {display} @ {odds}")
+    return header + "\n\n" + "\n".join(lines)
 
 
 def bet_slip_received(player):
