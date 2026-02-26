@@ -67,7 +67,7 @@ def _formalize_pick(description):
     text = description.strip()
     # Expand abbreviations (longest first to avoid partial matches)
     for abbr, full in sorted(PICK_ABBREVIATIONS.items(), key=lambda x: -len(x[0])):
-        text = re.sub(re.escape(abbr), full, text, flags=re.IGNORECASE)
+        text = re.sub(r'\b' + re.escape(abbr) + r'\b', full, text, flags=re.IGNORECASE)
     # Replace "/" between team names with " vs " (not fractional odds like 4/6)
     text = re.sub(r"([a-zA-Z][a-zA-Z\s]*)/([a-zA-Z][a-zA-Z\s]*)", r"\1 vs \2", text)
     return text.strip()
