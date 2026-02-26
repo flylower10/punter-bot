@@ -479,6 +479,7 @@ def handle_cumulative_picks(cumulative):
 
     week = get_or_create_current_week(group_id=_get_group_id())
     replies = []
+    first_pick_used = False
 
     for player, data in cumulative:
         pick, is_update, changed, previous_description = submit_pick(
@@ -493,10 +494,14 @@ def handle_cumulative_picks(cumulative):
         # Only confirm new picks or updates where something actually changed
         if changed:
             placer = get_next_placer() if data["odds_original"] == "placer" else None
+            first_of_week = not first_pick_used and not is_update and len(get_picks_for_week(week["id"])) == 1
+            if first_of_week:
+                first_pick_used = True
             replies.append(
                 butler.pick_confirmed(
                     player, data["description"], data["odds_original"], is_update,
-                    placer=placer, previous_description=previous_description
+                    placer=placer, previous_description=previous_description,
+                    first_of_week=first_of_week,
                 )
             )
 
@@ -546,9 +551,11 @@ def handle_pick(parsed):
 
     # Build confirmation reply (single-pick always confirms)
     placer = get_next_placer() if data["odds_original"] == "placer" else None
+    first_of_week = not is_update and len(get_picks_for_week(week["id"])) == 1
     reply = butler.pick_confirmed(
         player, data["description"], data["odds_original"], is_update,
-        placer=placer, previous_description=previous_description
+        placer=placer, previous_description=previous_description,
+        first_of_week=first_of_week,
     )
 
     # Check who's still missing

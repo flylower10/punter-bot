@@ -143,6 +143,12 @@ scenarios:
     is optional; leave it empty unless there's something worth adding (e.g. this is
     the last pick needed, or it's a notable update to a previous selection).
 
+  pick_confirmed_first: |
+    The first pick of the week has arrived — another round begins. The opening should
+    briefly acknowledge that the week's proceedings are underway. Not ceremonial, not
+    grand — just a quiet nod that the wheels are turning again. One sentence. The
+    closing is optional.
+
   all_picks_in: |
     All selections are in. A small moment of satisfaction, briefly acknowledged. One
     sentence. The placer is named in the template — you do not need to repeat this.
