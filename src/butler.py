@@ -48,7 +48,8 @@ def _frame(template, context, scenario=None, player_name=None):
     structured template content, but never rewrites the content itself.
     Returns the template unchanged if LLM is disabled or fails.
     """
-    framing = llm_client.get_framing(context, scenario=scenario, player_name=player_name)
+    full_context = f"{context}\n\nThe template that follows your opening line says: \"{template}\"\nDo not repeat any of this information."
+    framing = llm_client.get_framing(full_context, scenario=scenario, player_name=player_name)
     opening = framing.get("opening", "").strip()
     closing = framing.get("closing", "").strip()
     parts = []
