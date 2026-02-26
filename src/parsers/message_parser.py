@@ -131,6 +131,9 @@ def detect_sport(text):
 
 def _looks_like_pick(text):
     """Check if text looks like a pick (bet description) without explicit odds."""
+    # Long messages are almost certainly chat, not picks
+    if len(text.split()) > 15:
+        return False
     # Bet type keywords (BTTS, handicap, over/under, ht/ft)
     for pattern in BET_TYPE_PATTERNS.values():
         if pattern.search(text):
@@ -139,8 +142,10 @@ def _looks_like_pick(text):
     for pattern in WIN_PICK_PATTERNS:
         if pattern.search(text):
             return True
-    # Team vs team (e.g. "Leicester/Soton", "Scotland + 8")
-    if re.search(r"\w+[/\s]+(v|vs\.?|@)\s*\w+", text, re.IGNORECASE):
+    # Team vs team (e.g. "Leicester/Soton", "Leicester v Soton")
+    if re.search(r"\w+\s+(?:vs?\.?|@)\s+\w+", text, re.IGNORECASE):
+        return True
+    if re.search(r"\w+/\w+", text) and len(text.split()) <= 8:
         return True
     if re.search(r"[+-]\s*\d+\.?\d*", text):  # Handicap-style
         return True
