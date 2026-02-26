@@ -63,8 +63,10 @@
 - **urllib3 OpenSSL warning**: macOS system Python 3.9 uses LibreSSL 2.8.3. Harmless warning, can be ignored
 - **Chromium zombie processes**: Killing the bridge with ctrl-C sometimes leaves Chromium running. Use `pkill -f "Chromium.*wwebjs_auth"` before restarting
 - **`_shadow_message()` fixed**: Now calls working `llm_client.generate()` (re-implemented in Phase 2).
+- **Abbreviation expansion fixed**: Short codes (ne, sf, gb) used `re.sub` without word boundaries, corrupting team names (e.g. "BourNew Englandmouth"). Fixed with `\b` anchors.
+- **Parser false positives fixed**: Chat messages matched as picks — "The value" triggered "v" team-vs-team pattern, and long messages matched `_looks_like_pick`. Fixed with word boundaries on v/vs/@ and a 15-word length guard.
 
-## Current State (2026-02-25)
+## Current State (2026-02-26)
 
 - **Deployed on OCI**: Ubuntu 22.04 VM, Always Free tier (193.123.179.96)
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
@@ -76,7 +78,7 @@
 - **Phase 4 complete**: Multi-sport support (12 sports detected, fixture/odds/auto-result wired up)
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
-- **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content
+- **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content. Template text passed to LLM to prevent repetition. Reminders use opening only (no closing).
 - **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
 - **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
 - **API-Football**: Fixture caching (Wed 7:30PM), pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
@@ -132,8 +134,11 @@ The butler is formally nameless — the lads call him Botsu. He finds the whole 
 **Message structure:**
 - Opening line (butler-voiced, one sentence)
 - Structured template content (unchanged)
-- Closing line (butler-voiced, one sentence)
+- Closing line (butler-voiced, one sentence — omitted for reminders)
 - Slightly more latitude (two sentences) for week open/close
+- LLM receives template text to avoid repeating information
+- First pick of the week gets a special `pick_confirmed_first` scenario
+- All-picks-in message includes a summary of every player's selection
 
 **Player relationships:**
 - Ed: Professional admiration — runs a tight ship, the butler approves
@@ -349,5 +354,5 @@ pm2 restart all
 
 ---
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-26
 **Status:** ✅ Phase 4 Complete — Multi-sport support (12 sports detected, fixture/odds/auto-result ready)
