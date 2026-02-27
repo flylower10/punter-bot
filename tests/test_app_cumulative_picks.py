@@ -384,3 +384,121 @@ class TestCumulativePickWebhook:
         assert data["action"] == "replied"
         assert "Mr Kevin" in data["reply"]
         assert "Bet slip received" in data["reply"]
+
+
+class TestPickUpdateGuardrails:
+    """Test that single-message picks are rejected when the player already has a pick."""
+
+    def test_single_message_accepted_when_no_existing_pick(self, test_db, monkeypatch):
+        """A player with no pick can submit via single message (no emoji prefix)."""
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+
+        app = create_app()
+        client = app.test_client()
+
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Ronan",
+                "sender_phone": "",
+                "body": "Bournemouth 4/5",
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+
+        week = get_or_create_current_week(group_id="test-group@g.us")
+        picks = get_picks_for_week(week["id"])
+        assert len(picks) == 1
+        assert picks[0]["nickname"] == "Nug"
+
+    def test_single_message_ignored_when_player_has_pick(self, test_db, monkeypatch):
+        """A player who already has a pick is ignored on single message (no emoji prefix)."""
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        # Pre-submit a pick for Nug
+        week = get_or_create_current_week(group_id="test-group@g.us")
+        players = get_all_players()
+        nug = next(p for p in players if p["nickname"] == "Nug")
+        submit_pick(nug["id"], week["id"], "Bournemouth 4/5", 1.8, "4/5", "win")
+
+        # Now Nug sends a chat message that looks like a pick
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Ronan",
+                "sender_phone": "",
+                "body": "Arsenal 6/4",
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # Should be silently dropped — treated as chat, no reply
+        assert data["action"] == "no_reply"
+
+        # Pick should remain unchanged
+        picks = get_picks_for_week(week["id"])
+        nug_pick = next(p for p in picks if p["nickname"] == "Nug")
+        assert nug_pick["description"] == "Bournemouth 4/5"
+
+    def test_emoji_prefix_update_accepted_when_player_has_pick(self, test_db, monkeypatch):
+        """A player who already has a pick can update via emoji prefix (cumulative path)."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda: True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+
+        from src.app import create_app
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+
+        app = create_app()
+        client = app.test_client()
+
+        # Pre-submit a pick for Nug
+        week = get_or_create_current_week(group_id="test-group@g.us")
+        players = get_all_players()
+        nug = next(p for p in players if p["nickname"] == "Nug")
+        submit_pick(nug["id"], week["id"], "Bournemouth 4/5", 1.8, "4/5", "win")
+
+        # Nug sends emoji-prefixed update
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Nugent",
+                "sender_phone": "",
+                "body": "\U0001F357 Arsenal 6/4",
+                "group_id": "test-group@g.us",
+                "has_media": False,
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["action"] == "replied"
+        assert "Updated" in data["reply"]
+
+        # Pick should be updated
+        picks = get_picks_for_week(week["id"])
+        nug_pick = next(p for p in picks if p["nickname"] == "Nug")
+        assert nug_pick["description"] == "Arsenal 6/4"

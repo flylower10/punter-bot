@@ -539,6 +539,12 @@ def handle_pick(parsed):
     # Get or create the current week
     week = get_or_create_current_week(group_id=_get_group_id())
 
+    # If the player already has a pick, ignore — they must use emoji prefix to update
+    existing_pick = get_player_pick(week["id"], player["id"])
+    if existing_pick:
+        logger.info("Pick ignored — %s already has a pick, use emoji prefix to update", player["name"])
+        return None
+
     data = parsed["parsed_data"]
     pick, is_update, _, previous_description = submit_pick(
         player_id=player["id"],
