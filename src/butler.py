@@ -206,7 +206,7 @@ def bet_slip_received(player):
     return f"Thank you, {player['formal_name']}.  Bet slip received and recorded."
 
 
-def result_announced(player, description, odds, outcome, streak=None):
+def result_announced(player, description, odds, outcome, streak=None, acca_lost=False):
     """Announce a result."""
     formal = _formalize_pick(description)
     display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
@@ -234,7 +234,10 @@ def result_announced(player, description, odds, outcome, streak=None):
     )
 
     streak_ctx = f" ({streak} streak)" if streak else ""
-    acca_ctx = " This loss means the group's accumulator has lost for the week." if outcome == "loss" else ""
+    if acca_lost:
+        acca_ctx = " The group's accumulator has already lost for the week."
+    else:
+        acca_ctx = ""
     context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}{acca_ctx}"
     return _frame(template, context, scenario=scenario, player_name=_first_name(player))
 

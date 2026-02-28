@@ -646,10 +646,14 @@ def handle_result(parsed):
     streak = get_consecutive_losses(target_player["id"])
     streak_str = f"{streak}L" if streak > 0 and data["outcome"] == "loss" else None
 
+    # Check if the accumulator is already dead (any loss this week)
+    week_results = get_week_results(week["id"])
+    acca_lost = any(r["outcome"] == "loss" for r in week_results)
+
     # Build announcement
     reply = butler.result_announced(
         target_player, pick["description"], pick["odds_original"], data["outcome"],
-        streak=streak_str,
+        streak=streak_str, acca_lost=acca_lost,
     )
     penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
     penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}
