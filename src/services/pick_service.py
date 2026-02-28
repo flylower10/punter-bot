@@ -95,7 +95,7 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
 ODDS_ONLY_SPORTS = {"tennis", "golf", "boxing"}
 
 
-def _try_enrich(description, bet_type, sport="football"):
+def _try_enrich(description, bet_type, sport="football", include_started=False):
     """
     Attempt to match a pick to a fixture and look up market odds.
     Returns empty dict on any failure — enrichment is best-effort.
@@ -108,7 +108,7 @@ def _try_enrich(description, bet_type, sport="football"):
 
     try:
         from src.services.match_service import match_pick
-        result = match_pick(description, bet_type, sport=sport)
+        result = match_pick(description, bet_type, sport=sport, include_started=include_started)
         if result:
             logger.info("Enriched pick: %s → %s", description[:40], result.get("event_name", "?"))
             # Try to get market price from The Odds API
@@ -202,7 +202,7 @@ def re_enrich_unmatched_picks(week_id):
 
     enriched = 0
     for pick in unmatched:
-        enrichment = _try_enrich(pick["description"], pick["bet_type"])
+        enrichment = _try_enrich(pick["description"], pick["bet_type"], include_started=True)
         if enrichment.get("api_fixture_id"):
             conn = get_db()
             conn.execute(

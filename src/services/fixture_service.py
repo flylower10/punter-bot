@@ -260,13 +260,16 @@ def cache_normalized_fixtures(normalized_fixtures):
     return count
 
 
-def get_upcoming_fixtures(days_ahead=4, sport=None):
+def get_upcoming_fixtures(days_ahead=4, sport=None, include_started=False):
     """
-    Get cached fixtures that haven't started yet, within the next N days.
+    Get cached fixtures within a recent window.
 
     Args:
         days_ahead: How many days ahead to look.
         sport: Optional sport filter (e.g. "football", "rugby"). None = all sports.
+        include_started: If True, include in-play and finished fixtures (for
+            re-enrichment of picks submitted before kickoff). Default False
+            returns only NS/TBD fixtures.
 
     Returns:
         list of fixture dicts from the local database.
@@ -276,18 +279,34 @@ def get_upcoming_fixtures(days_ahead=4, sport=None):
     cutoff = (now + timedelta(days=days_ahead)).isoformat()
 
     conn = get_db()
-    if sport:
-        fixtures = conn.execute(
-            "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-            "AND status IN ('NS', 'TBD') AND sport = ? ORDER BY kickoff",
-            (now.isoformat(), cutoff, sport),
-        ).fetchall()
+    if include_started:
+        # Include all fixtures from the last 3 days through the lookahead window
+        lookback = (now - timedelta(days=3)).isoformat()
+        if sport:
+            fixtures = conn.execute(
+                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+                "AND sport = ? ORDER BY kickoff",
+                (lookback, cutoff, sport),
+            ).fetchall()
+        else:
+            fixtures = conn.execute(
+                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+                "ORDER BY kickoff",
+                (lookback, cutoff),
+            ).fetchall()
     else:
-        fixtures = conn.execute(
-            "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-            "AND status IN ('NS', 'TBD') ORDER BY kickoff",
-            (now.isoformat(), cutoff),
-        ).fetchall()
+        if sport:
+            fixtures = conn.execute(
+                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+                "AND status IN ('NS', 'TBD') AND sport = ? ORDER BY kickoff",
+                (now.isoformat(), cutoff, sport),
+            ).fetchall()
+        else:
+            fixtures = conn.execute(
+                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
+                "AND status IN ('NS', 'TBD') ORDER BY kickoff",
+                (now.isoformat(), cutoff),
+            ).fetchall()
     conn.close()
     return [dict(f) for f in fixtures]
 

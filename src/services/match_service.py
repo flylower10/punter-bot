@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 FUZZY_THRESHOLD = 0.6
 
 
-def match_pick(description, bet_type="win", sport="football"):
+def match_pick(description, bet_type="win", sport="football", include_started=False):
     """
     Try to match a pick description to a cached fixture.
 
@@ -31,6 +31,8 @@ def match_pick(description, bet_type="win", sport="football"):
         description: The raw pick text (e.g. "Liverpool 2/1", "Arsenal to beat Chelsea")
         bet_type: The detected bet type (win, btts, over_under, etc.)
         sport: The detected sport (e.g. "football", "rugby", "nfl")
+        include_started: If True, also match against in-play/finished fixtures
+            (used by re-enrichment for picks submitted before kickoff).
 
     Returns:
         dict with enrichment data, or None if no match found:
@@ -50,7 +52,7 @@ def match_pick(description, bet_type="win", sport="football"):
     if not team_names:
         return None
 
-    fixtures = get_upcoming_fixtures(sport=sport)
+    fixtures = get_upcoming_fixtures(sport=sport, include_started=include_started)
     if not fixtures:
         logger.info("No cached fixtures — skipping match")
         return None
