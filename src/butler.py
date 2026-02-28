@@ -91,7 +91,7 @@ def _strip_odds_for_display(text):
     return re.sub(r"\s+", " ", text).strip().rstrip(".,")
 
 
-def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None, first_of_week=False, last_pick=False):
+def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None, first_of_week=False, last_pick=False, sport_clarification=None):
     """Confirm a pick has been recorded."""
     formal = _formalize_pick(description)
 
@@ -106,6 +106,10 @@ def pick_confirmed(player, description, odds, is_update=False, placer=None, prev
         template = f"{action}, {player['formal_name']}.  Replacing {previous_display} with {body}"
     else:
         template = f"{action}, {player['formal_name']}.  {body}"
+
+    # GAA dual-county clarification note
+    if sport_clarification:
+        template += f"\n(Recorded as {sport_clarification} — reply with your emoji prefix + 'hurling' or 'football' to correct.)"
 
     # When this is the last pick, skip LLM framing — the all_picks_in block provides context
     if last_pick:

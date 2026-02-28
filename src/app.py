@@ -7,7 +7,7 @@ from flask import Flask, g, jsonify, request
 
 from src.config import Config
 from src.db import init_db, get_db
-from src.parsers.message_parser import parse_message, parse_cumulative_picks
+from src.parsers.message_parser import parse_message, parse_cumulative_picks, gaa_needs_clarification
 from src.services.player_service import (
     lookup_player, is_admin, is_superadmin, get_emoji_to_player_map,
 )
@@ -326,6 +326,10 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
     if not week:
         return None
 
+    # Already confirmed — don't re-acknowledge
+    if week.get("placer_id"):
+        return None
+
     if not all_picks_in(week["id"]):
         return None
 
@@ -333,11 +337,9 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
     if not next_placer:
         return None
 
+    # Accept from any known player — the designated placer may delegate to someone else
     player = lookup_player(sender_phone=sender_phone, sender_name=sender)
-    is_placer = player and next_placer["id"] == player["id"]
-    is_admin = _is_authorized_admin({"sender": sender, "sender_phone": sender_phone})
-
-    if not (is_placer or is_admin):
+    if not player and not _is_authorized_admin({"sender": sender, "sender_phone": sender_phone}):
         return None
 
     advance_rotation(week["id"], next_placer["id"])
@@ -508,11 +510,14 @@ def handle_cumulative_picks(cumulative):
     confirmed_replies = []
     for i, (player, data, is_update, placer, previous_description, first_of_week) in enumerate(replies):
         is_last = last_pick and i == len(replies) - 1
+        sport = data.get("sport", "")
+        clarification = _gaa_clarification(sport, data["description"])
         confirmed_replies.append(
             butler.pick_confirmed(
                 player, data["description"], data["odds_original"], is_update,
                 placer=placer, previous_description=previous_description,
                 first_of_week=first_of_week, last_pick=is_last,
+                sport_clarification=clarification,
             )
         )
     replies = confirmed_replies
@@ -570,10 +575,13 @@ def handle_pick(parsed):
     first_of_week = not is_update and len(get_picks_for_week(week["id"])) == 1
     missing = get_missing_players(week["id"])
     last_pick = not missing and all_picks_in(week["id"])
+    sport = data.get("sport", "")
+    clarification = _gaa_clarification(sport, data["description"])
     reply = butler.pick_confirmed(
         player, data["description"], data["odds_original"], is_update,
         placer=placer, previous_description=previous_description,
         first_of_week=first_of_week, last_pick=last_pick,
+        sport_clarification=clarification,
     )
 
     # Check who's still missing
@@ -589,6 +597,13 @@ def handle_pick(parsed):
             reply += "\nAll selections have been received."
 
     return reply
+
+
+def _gaa_clarification(sport, description):
+    """Return a human-readable sport label if a GAA dual-county pick needs clarification."""
+    if sport in ("gaa_football", "gaa_hurling") and gaa_needs_clarification(description):
+        return "GAA Football" if sport == "gaa_football" else "GAA Hurling"
+    return None
 
 
 def handle_result(parsed):

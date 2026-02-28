@@ -2,6 +2,7 @@ import os
 
 from src.parsers.message_parser import (
     parse_message, extract_test_prefix, parse_cumulative_picks, detect_sport,
+    gaa_needs_clarification,
 )
 
 
@@ -318,8 +319,78 @@ class TestSportDetection:
     def test_darts_keyword(self):
         assert detect_sport("PDC World Darts 6/1") == "darts"
 
-    def test_gaa_keyword(self):
-        assert detect_sport("GAA All-Ireland Dublin 2/1") == "gaa"
+    def test_gaa_keyword_defaults_football(self):
+        assert detect_sport("GAA All-Ireland Dublin 2/1") == "gaa_football"
+
+    def test_gaa_hurling_keyword(self):
+        assert detect_sport("Dublin hurling 3/1") == "gaa_hurling"
+
+    def test_gaa_camogie(self):
+        assert detect_sport("Camogie final 5/2") == "gaa_hurling"
+
+    def test_gaa_liam_maccarthy(self):
+        assert detect_sport("Liam MacCarthy Cup 4/1") == "gaa_hurling"
+
+    def test_gaa_sam_maguire(self):
+        assert detect_sport("Sam Maguire final 3/1") == "gaa_football"
+
+    def test_gaa_football_county_cavan(self):
+        assert detect_sport("Cavan evens") == "gaa_football"
+
+    def test_gaa_football_county_tyrone(self):
+        assert detect_sport("Tyrone +2 11/10") == "gaa_football"
+
+    def test_gaa_hurling_county_kilkenny(self):
+        assert detect_sport("Kilkenny 2/1") == "gaa_hurling"
+
+    def test_gaa_hurling_county_wexford(self):
+        assert detect_sport("Wexford 5/2") == "gaa_hurling"
+
+    def test_gaa_dual_county_defaults_football(self):
+        assert detect_sport("Dublin +2 11/10") == "gaa_football"
+
+    def test_gaa_dual_county_with_hurling_keyword(self):
+        assert detect_sport("Dublin hurling 3/1") == "gaa_hurling"
+
+    def test_gaa_dual_county_cork(self):
+        assert detect_sport("Cork 6/4") == "gaa_football"
+
+    def test_gaa_dual_county_cork_hurling(self):
+        assert detect_sport("Cork hurling 6/4") == "gaa_hurling"
+
+    def test_football_not_affected(self):
+        """Soccer picks must still detect as football, not GAA."""
+        assert detect_sport("Arsenal 6/4") == "football"
+
+    def test_liverpool_still_football(self):
+        assert detect_sport("Liverpool 2/1") == "football"
+
+    def test_gaa_generic_keyword(self):
+        assert detect_sport("GAA this weekend 3/1") == "gaa_football"
+
+    def test_all_ireland_defaults_football(self):
+        assert detect_sport("All-Ireland semi-final 5/1") == "gaa_football"
+
+    def test_gaa_needs_clarification_dual_county(self):
+        assert gaa_needs_clarification("Dublin +2 11/10") is True
+
+    def test_gaa_needs_clarification_explicit_hurling(self):
+        assert gaa_needs_clarification("Dublin hurling 3/1") is False
+
+    def test_gaa_needs_clarification_football_county(self):
+        assert gaa_needs_clarification("Cavan evens") is False
+
+    def test_gaa_needs_clarification_hurling_county(self):
+        assert gaa_needs_clarification("Kilkenny 2/1") is False
+
+    def test_gaa_needs_clarification_gaa_keyword(self):
+        assert gaa_needs_clarification("GAA Dublin 2/1") is False
+
+    def test_gaa_sport_in_parsed_pick(self):
+        """GAA county picks should have gaa_football/gaa_hurling sport."""
+        result = parse_message("Dublin +2 11/10", "Kev")
+        assert result["type"] == "pick"
+        assert result["parsed_data"]["sport"] == "gaa_football"
 
     def test_horse_racing_keyword(self):
         assert detect_sport("Cheltenham Gold Cup 8/1") == "horse_racing"

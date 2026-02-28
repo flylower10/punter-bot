@@ -106,13 +106,34 @@ SPORT_KEYWORDS = {
         r"world\s*darts|180s?\s*over)\b",
         re.IGNORECASE,
     ),
-    "gaa": re.compile(
-        r"\b(gaa|hurling|camogie|"
-        r"all[\s-]*ireland|sam\s*maguire|liam\s*maccarthy|"
-        r"gaa\s*football)\b",
-        re.IGNORECASE,
-    ),
 }
+
+# GAA county classification for two-step sport detection
+_HURLING_COUNTIES = {"kilkenny", "waterford", "wexford", "clare"}
+_FOOTBALL_COUNTIES = {
+    "tyrone", "donegal", "monaghan", "cavan", "fermanagh", "leitrim", "longford",
+    "sligo", "roscommon", "mayo", "louth", "carlow", "wicklow",
+}
+_DUAL_COUNTIES = {
+    "dublin", "cork", "kerry", "galway", "limerick", "tipperary",
+    "meath", "kildare", "laois", "offaly", "westmeath",
+    "down", "armagh", "derry", "antrim",
+}
+_ALL_COUNTIES = _HURLING_COUNTIES | _FOOTBALL_COUNTIES | _DUAL_COUNTIES
+
+_HURLING_KEYWORDS_RE = re.compile(
+    r"\b(hurling|camogie|liam\s*maccarthy)\b", re.IGNORECASE
+)
+_GAA_FOOTBALL_KEYWORDS_RE = re.compile(
+    r"\b(gaa\s*football|sam\s*maguire)\b", re.IGNORECASE
+)
+_GAA_GENERIC_RE = re.compile(
+    r"\b(gaa|all[\s-]*ireland)\b", re.IGNORECASE
+)
+_COUNTY_RE = re.compile(
+    r"\b(" + "|".join(sorted(_ALL_COUNTIES, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
 
 
 def detect_sport(text):
@@ -120,13 +141,75 @@ def detect_sport(text):
     Detect the sport from pick text using keyword matching.
 
     Returns the sport name (e.g. "rugby", "nfl", "tennis") or "football" as default.
+    GAA uses two-step detection: county names + explicit keywords → gaa_football or gaa_hurling.
     """
     if not text:
         return "football"
     for sport, pattern in SPORT_KEYWORDS.items():
         if pattern.search(text):
             return sport
+
+    # Two-step GAA detection (after other sports, before football fallback)
+    gaa = _detect_gaa(text)
+    if gaa:
+        return gaa
+
     return "football"
+
+
+def _detect_gaa(text):
+    """
+    Detect GAA football vs hurling from pick text.
+
+    Returns 'gaa_football', 'gaa_hurling', or None.
+    """
+    has_hurling = bool(_HURLING_KEYWORDS_RE.search(text))
+    has_gaa_football = bool(_GAA_FOOTBALL_KEYWORDS_RE.search(text))
+    has_gaa_generic = bool(_GAA_GENERIC_RE.search(text))
+
+    # Explicit hurling keyword always wins
+    if has_hurling:
+        return "gaa_hurling"
+
+    # Explicit GAA football keyword
+    if has_gaa_football:
+        return "gaa_football"
+
+    # Generic "gaa" or "all-ireland" → default gaa_football
+    if has_gaa_generic:
+        return "gaa_football"
+
+    # County name detection
+    match = _COUNTY_RE.search(text)
+    if match:
+        county = match.group(1).lower()
+        if county in _HURLING_COUNTIES:
+            return "gaa_hurling"
+        # Football-only or dual county → gaa_football
+        return "gaa_football"
+
+    return None
+
+
+def gaa_needs_clarification(text):
+    """
+    Return True if the pick was detected as GAA via a dual-code county
+    without an explicit hurling/football qualifier.
+    """
+    if not text:
+        return False
+    # If there's an explicit keyword, no ambiguity
+    if _HURLING_KEYWORDS_RE.search(text):
+        return False
+    if _GAA_FOOTBALL_KEYWORDS_RE.search(text):
+        return False
+    if _GAA_GENERIC_RE.search(text):
+        return False
+    # Check if a dual county triggered the detection
+    match = _COUNTY_RE.search(text)
+    if match and match.group(1).lower() in _DUAL_COUNTIES:
+        return True
+    return False
 
 
 def _looks_like_pick(text):
