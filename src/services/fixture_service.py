@@ -56,13 +56,20 @@ def fetch_weekend_fixtures():
     # Re-enrich any unmatched picks now that new fixtures are available
     if total_cached > 0:
         try:
-            from src.services.week_service import get_current_week
-            week = get_current_week()
-            if week:
-                from src.services.pick_service import re_enrich_unmatched_picks
-                enriched = re_enrich_unmatched_picks(week["id"])
+            from src.db import get_db as _get_db
+            from src.services.pick_service import re_enrich_unmatched_picks
+            conn = _get_db()
+            season = str(datetime.now(tz).year)
+            active_weeks = conn.execute(
+                "SELECT id FROM weeks WHERE status IN ('open', 'closed') AND season = ?",
+                (season,),
+            ).fetchall()
+            conn.close()
+            for week_row in active_weeks:
+                enriched = re_enrich_unmatched_picks(week_row["id"])
                 if enriched:
-                    logger.info("Re-enriched %d picks after fixture fetch", enriched)
+                    logger.info("Re-enriched %d picks for week %d after fixture fetch",
+                                enriched, week_row["id"])
         except Exception as e:
             logger.warning("Re-enrichment failed (non-blocking): %s", e)
 
