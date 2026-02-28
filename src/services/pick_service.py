@@ -251,6 +251,25 @@ def get_picks_for_week(week_id):
     return [dict(p) for p in picks]
 
 
+def get_picks_for_week_by_kickoff(week_id):
+    """Return all picks for a week, ordered by fixture kickoff time (NULLs last)."""
+    conn = get_db()
+    picks = conn.execute(
+        "SELECT p.*, pl.nickname, pl.formal_name, pl.emoji, "
+        "r.outcome as result_outcome, "
+        "f.kickoff, f.home_team, f.away_team, f.status as fixture_status "
+        "FROM picks p "
+        "JOIN players pl ON p.player_id = pl.id "
+        "LEFT JOIN results r ON r.pick_id = p.id "
+        "LEFT JOIN fixtures f ON f.api_id = p.api_fixture_id "
+        "WHERE p.week_id = ? "
+        "ORDER BY f.kickoff IS NULL, f.kickoff, p.submitted_at",
+        (week_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(p) for p in picks]
+
+
 def get_missing_players(week_id):
     """Return players who haven't submitted a pick for this week."""
     conn = get_db()

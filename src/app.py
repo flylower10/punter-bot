@@ -17,6 +17,7 @@ from src.services.week_service import (
 )
 from src.services.pick_service import (
     submit_pick, get_missing_players, all_picks_in, get_player_pick, get_picks_for_week,
+    get_picks_for_week_by_kickoff,
 )
 from src.services.result_service import (
     record_result, get_consecutive_losses, all_results_in as all_results_complete,
@@ -99,8 +100,8 @@ def webhook():
         if len(cumulative) >= 1:
             reply = handle_cumulative_picks(cumulative)
         else:
-            # Fall back to single-message parsing
-            parsed = parse_message(body, sender, sender_phone)
+            # Fall back to single-message parsing (pass emoji_map for emoji-based results)
+            parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
             logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
             if parsed["type"] == "command":
                 reply = handle_command(parsed)
@@ -525,7 +526,7 @@ def handle_cumulative_picks(cumulative):
         replies.append(butler.picks_status(None, missing))
     elif all_picks_in(week["id"]):
         placer = get_next_placer()
-        picks = get_picks_for_week(week["id"])
+        picks = get_picks_for_week_by_kickoff(week["id"])
         if placer:
             replies.append(butler.all_picks_in(placer, picks=picks))
         else:
@@ -590,7 +591,7 @@ def handle_pick(parsed):
     elif last_pick:
         # All picks are in — announce the placer with summary
         placer = get_next_placer()
-        picks = get_picks_for_week(week["id"])
+        picks = get_picks_for_week_by_kickoff(week["id"])
         if placer:
             reply += "\n" + butler.all_picks_in(placer, picks=picks)
         else:
@@ -798,7 +799,7 @@ def test_webhook():
             if len(cumulative) >= 1:
                 reply = handle_cumulative_picks(cumulative)
             else:
-                parsed = parse_message(body, sender, sender_phone)
+                parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
                 if parsed["type"] == "command":
                     reply = handle_command(parsed)
                 elif parsed["type"] == "pick":

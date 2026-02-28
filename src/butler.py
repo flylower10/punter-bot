@@ -7,6 +7,9 @@ responses are generated dynamically via Groq; otherwise falls back to templates.
 
 import logging
 import re
+from datetime import datetime
+
+import pytz
 
 from src import llm_client
 
@@ -129,22 +132,73 @@ def picks_status(submitted, missing):
 
 
 def all_picks_in(placer, picks=None):
-    """Announce all picks are in, who places the bet, and list all selections."""
+    """Announce all picks are in, who places the bet, and list all selections.
+
+    When picks include kickoff data (from get_picks_for_week_by_kickoff), orders
+    by kickoff time with day headers and fixture names. Unmatched picks appear
+    under 'Kickoff TBC'.
+    """
     header = (
         f"All selections have been received.  "
         f"{placer['formal_name']}, you are next in the rotation to place the wager."
     )
     if not picks:
         return header
-    lines = []
+
+    tz = pytz.timezone("Europe/Dublin")
+
+    matched = []
+    unmatched = []
     for pick in picks:
-        emoji = _primary_emoji(pick.get("emoji", ""))
-        prefix = f"{emoji} " if emoji else ""
-        formal = _formalize_pick(pick.get("description", ""))
-        display = _strip_odds_for_display(formal)
-        odds = pick.get("odds_original", "")
-        lines.append(f"{prefix}{pick['formal_name']} — {display} @ {odds}")
+        if pick.get("kickoff"):
+            matched.append(pick)
+        else:
+            unmatched.append(pick)
+
+    lines = []
+    current_day = None
+
+    for pick in matched:
+        ko = pick["kickoff"]
+        if isinstance(ko, str):
+            # Parse ISO timestamp — try with and without timezone
+            try:
+                dt = datetime.fromisoformat(ko)
+            except ValueError:
+                dt = datetime.strptime(ko, "%Y-%m-%dT%H:%M:%S")
+            if dt.tzinfo is None:
+                dt = pytz.utc.localize(dt)
+            dt_local = dt.astimezone(tz)
+        else:
+            dt_local = ko if ko.tzinfo else pytz.utc.localize(ko).astimezone(tz)
+
+        day_name = dt_local.strftime("%A")
+        time_str = dt_local.strftime("%-I:%M %p")
+
+        if day_name != current_day:
+            current_day = day_name
+            lines.append(day_name)
+
+        fixture = f"{pick.get('home_team', '?')} vs {pick.get('away_team', '?')}"
+        lines.append(f"\u23f0 {time_str} \u2014 {fixture}")
+        lines.append(_format_pick_line(pick))
+
+    if unmatched:
+        lines.append("Kickoff TBC")
+        for pick in unmatched:
+            lines.append(_format_pick_line(pick))
+
     return header + "\n\n" + "\n".join(lines)
+
+
+def _format_pick_line(pick):
+    """Format a single pick line: emoji formal_name — description @ odds."""
+    emoji = _primary_emoji(pick.get("emoji", ""))
+    prefix = f"{emoji} " if emoji else ""
+    formal = _formalize_pick(pick.get("description", ""))
+    display = _strip_odds_for_display(formal)
+    odds = pick.get("odds_original", "")
+    return f"{prefix}{pick['formal_name']} \u2014 {display} @ {odds}"
 
 
 def bet_slip_received(player):
@@ -180,7 +234,8 @@ def result_announced(player, description, odds, outcome, streak=None):
     )
 
     streak_ctx = f" ({streak} streak)" if streak else ""
-    context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}"
+    acca_ctx = " This loss means the group's accumulator has lost for the week." if outcome == "loss" else ""
+    context = f"{player['formal_name']}'s pick {outcome}: {display_text} @ {odds}.{streak_ctx}{acca_ctx}"
     return _frame(template, context, scenario=scenario, player_name=_first_name(player))
 
 

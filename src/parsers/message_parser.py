@@ -251,7 +251,7 @@ def extract_test_prefix(text):
     return None, text
 
 
-def parse_message(text, sender="", sender_phone=""):
+def parse_message(text, sender="", sender_phone="", emoji_map=None):
     """
     Classify a message and extract relevant data.
 
@@ -261,6 +261,8 @@ def parse_message(text, sender="", sender_phone=""):
         sender: who sent it
         sender_phone: sender's phone number
         parsed_data: dict with type-specific fields
+
+    emoji_map: optional dict of emoji -> player for emoji-based result detection.
     """
     text = text.strip()
 
@@ -276,8 +278,8 @@ def parse_message(text, sender="", sender_phone=""):
     if text.startswith("!"):
         return _parse_command(text, sender, sender_phone)
 
-    # Results: player name + win/loss emoji
-    result = _parse_result(text, sender, sender_phone)
+    # Results: player name or emoji + win/loss emoji
+    result = _parse_result(text, sender, sender_phone, emoji_map=emoji_map)
     if result:
         return result
 
@@ -301,21 +303,31 @@ def _parse_command(text, sender, sender_phone=""):
     }, sender_phone)
 
 
-def _parse_result(text, sender, sender_phone=""):
-    """Detect result messages like 'Kev check_emoji' or 'DA cross_emoji'."""
+def _parse_result(text, sender, sender_phone="", emoji_map=None):
+    """Detect result messages like 'Kev check_emoji' or '♟️❌'."""
     if WIN_EMOJI not in text and LOSS_EMOJI not in text:
         return None
+
+    outcome = "win" if WIN_EMOJI in text else "loss"
 
     # Match nicknames as whole words (so "da" doesn't match inside "Aidan")
     # Sort by length descending so "nialler" matches before "nug" in "Nialler"
     for nickname in sorted(PLAYER_NICKNAMES, key=len, reverse=True):
         pattern = re.compile(r"\b" + re.escape(nickname) + r"\b", re.IGNORECASE)
         if pattern.search(text):
-            outcome = "win" if WIN_EMOJI in text else "loss"
             return _make_result("result", text, sender, {
                 "player_nickname": nickname,
                 "outcome": outcome,
             }, sender_phone)
+
+    # Emoji-based result: e.g. "♟️❌" or "🍋✅"
+    if emoji_map:
+        for emoji_str, player in sorted(emoji_map.items(), key=lambda x: -len(x[0])):
+            if emoji_str in text:
+                return _make_result("result", text, sender, {
+                    "player_nickname": player["nickname"],
+                    "outcome": outcome,
+                }, sender_phone)
 
     return None
 

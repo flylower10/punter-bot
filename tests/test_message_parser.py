@@ -142,6 +142,34 @@ class TestResultParsing:
         assert result["parsed_data"]["player_nickname"] == "aidan"
         assert result["parsed_data"]["outcome"] == "loss"
 
+    def test_emoji_result_loss(self):
+        """Player emoji + ❌ recognised as result when emoji_map provided."""
+        emoji_map = {"\u265f\ufe0f": {"nickname": "pawn", "formal_name": "Mr Aidan"}}
+        result = parse_message("\u265f\ufe0f\u274c", "Ed", emoji_map=emoji_map)
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "pawn"
+        assert result["parsed_data"]["outcome"] == "loss"
+
+    def test_emoji_result_win(self):
+        """Player emoji + ✅ recognised as result when emoji_map provided."""
+        emoji_map = {"\U0001f3c6": {"nickname": "nialler", "formal_name": "Mr Niall"}}
+        result = parse_message("\U0001f3c6\u2705", "Ed", emoji_map=emoji_map)
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "nialler"
+        assert result["parsed_data"]["outcome"] == "win"
+
+    def test_emoji_result_without_map_not_parsed(self):
+        """Emoji + ❌ without emoji_map is not recognised as a result."""
+        result = parse_message("\u265f\ufe0f\u274c", "Ed")
+        assert result["type"] != "result"
+
+    def test_text_nickname_still_preferred_over_emoji(self):
+        """Text nickname match takes priority over emoji match."""
+        emoji_map = {"\u265f\ufe0f": {"nickname": "pawn", "formal_name": "Mr Aidan"}}
+        result = parse_message("Pawn \u274c", "Ed", emoji_map=emoji_map)
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "pawn"
+
 
 class TestGeneralMessages:
     def test_regular_chat(self):
