@@ -253,7 +253,7 @@ def _evaluate_pick(pick, fixture):
     away_team = fixture.get("away_team", "").lower()
 
     if bet_type == "win":
-        return _evaluate_win(pick, home_team, away_team, home_score, away_score)
+        return _evaluate_win(pick, home_team, away_team, home_score, away_score, sport)
     elif bet_type == "btts":
         # BTTS is football-specific (both teams to score)
         if sport != "football":
@@ -265,15 +265,15 @@ def _evaluate_pick(pick, fixture):
         # HT/FT is football-specific
         if sport != "football":
             return None
-        return _evaluate_ht_ft(pick, fixture)
+        return _evaluate_ht_ft(pick, fixture, sport)
     elif bet_type == "handicap":
-        return _evaluate_handicap(pick, home_team, away_team, home_score, away_score)
+        return _evaluate_handicap(pick, home_team, away_team, home_score, away_score, sport)
     else:
         # Default to win evaluation for unknown bet types
-        return _evaluate_win(pick, home_team, away_team, home_score, away_score)
+        return _evaluate_win(pick, home_team, away_team, home_score, away_score, sport)
 
 
-def _evaluate_win(pick, home_team, away_team, home_score, away_score):
+def _evaluate_win(pick, home_team, away_team, home_score, away_score, sport="football"):
     """
     Evaluate a win/match result pick.
 
@@ -281,9 +281,9 @@ def _evaluate_win(pick, home_team, away_team, home_score, away_score):
     """
     description = pick.get("description", "").lower()
 
-    # Try to figure out which team was picked
-    picked_home = _team_in_text(home_team, description)
-    picked_away = _team_in_text(away_team, description)
+    # Try to figure out which team was picked (with alias fallback)
+    picked_home = _team_in_text_with_aliases(home_team, description, sport)
+    picked_away = _team_in_text_with_aliases(away_team, description, sport)
 
     # Check for draw pick
     if re.search(r"\bdraw\b", description, re.IGNORECASE):
@@ -331,7 +331,7 @@ def _evaluate_over_under(pick, home_score, away_score):
     return None
 
 
-def _evaluate_ht_ft(pick, fixture):
+def _evaluate_ht_ft(pick, fixture, sport="football"):
     """
     Half-Time/Full-Time: check if the HT and FT results match the pick.
 
@@ -349,8 +349,8 @@ def _evaluate_ht_ft(pick, fixture):
     home_team = fixture.get("home_team", "").lower()
     away_team = fixture.get("away_team", "").lower()
 
-    picked_home = _team_in_text(home_team, description)
-    picked_away = _team_in_text(away_team, description)
+    picked_home = _team_in_text_with_aliases(home_team, description, sport)
+    picked_away = _team_in_text_with_aliases(away_team, description, sport)
 
     if picked_home:
         # Picked team leading at HT AND winning at FT
@@ -365,7 +365,7 @@ def _evaluate_ht_ft(pick, fixture):
     return None
 
 
-def _evaluate_handicap(pick, home_team, away_team, home_score, away_score):
+def _evaluate_handicap(pick, home_team, away_team, home_score, away_score, sport="football"):
     """
     Evaluate a handicap pick. Works for all sports.
 
@@ -383,8 +383,8 @@ def _evaluate_handicap(pick, home_team, away_team, home_score, away_score):
     handicap = value if sign == "+" else -value
 
     # Determine which team has the handicap
-    picked_home = _team_in_text(home_team, description)
-    picked_away = _team_in_text(away_team, description)
+    picked_home = _team_in_text_with_aliases(home_team, description, sport)
+    picked_away = _team_in_text_with_aliases(away_team, description, sport)
 
     if picked_home and not picked_away:
         adjusted = (home_score + handicap) - away_score
@@ -424,5 +424,35 @@ def _team_in_text(team_name, text):
             base = team_lower[:-len(suffix)]
             if base and len(base) >= 4 and base in text_lower:
                 return True
+
+    return False
+
+
+def _team_in_text_with_aliases(team_name, text, sport="football"):
+    """Check if a team appears in text, using alias table as fallback."""
+    if _team_in_text(team_name, text):
+        return True
+
+    # Try resolving chunks of the description through the alias table
+    from src.services.match_service import _resolve_alias
+
+    # Strip odds from end (fractional like "8/15" or decimal like "1.53")
+    cleaned = re.sub(r'\s+\d+/\d+\s*$', '', text)
+    cleaned = re.sub(r'\s+\d+\.\d+\s*$', '', cleaned)
+
+    # Split on common bet phrases to isolate team name chunks
+    chunks = re.split(
+        r'\b(?:to win|to beat|to draw|draw|ht/ft|over|under)\b',
+        cleaned, flags=re.IGNORECASE
+    )
+
+    team_lower = team_name.lower()
+    for chunk in chunks:
+        chunk = chunk.strip()
+        if not chunk or len(chunk) < 3:
+            continue
+        canonical = _resolve_alias(chunk, sport)
+        if canonical.lower() == team_lower:
+            return True
 
     return False

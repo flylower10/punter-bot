@@ -342,7 +342,7 @@ def refresh_fixture(api_id):
     Re-fetch a single fixture from API-Football and update the cache.
     Used to check for score updates during auto-resulting.
     """
-    fixture_data = get_fixture_by_id(api_id)
+    fixture_data = get_fixture_by_id(api_id, cache_ttl_hours=0)
     if fixture_data:
         _cache_fixtures([fixture_data])
         return get_fixture_by_api_id(api_id)
@@ -360,7 +360,7 @@ def refresh_fixtures_by_date(date_str):
     Returns:
         int — number of fixtures updated.
     """
-    fixtures = get_fixtures_by_date(date_str)
+    fixtures = get_fixtures_by_date(date_str, cache_ttl_hours=0)
     if fixtures:
         return _cache_fixtures(fixtures)
     return 0

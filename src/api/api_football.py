@@ -117,17 +117,18 @@ def _football_season_year():
     return today.year if today.month >= 8 else today.year - 1
 
 
-def get_fixtures_by_date(date_str):
+def get_fixtures_by_date(date_str, cache_ttl_hours=6):
     """
     Fetch fixtures for a specific date.
 
     Args:
         date_str: Date in YYYY-MM-DD format.
+        cache_ttl_hours: How long to use cached response (0 = always fetch).
 
     Returns:
         list of fixture dicts, or empty list on failure.
     """
-    data = _get("/fixtures", {"date": date_str}, cache_ttl_hours=6)
+    data = _get("/fixtures", {"date": date_str}, cache_ttl_hours=cache_ttl_hours)
     if not data:
         return []
     return data.get("response", [])
@@ -159,14 +160,18 @@ def get_fixtures_by_date_range(start_date, end_date, league_id=None):
     return data.get("response", [])
 
 
-def get_fixture_by_id(fixture_id):
+def get_fixture_by_id(fixture_id, cache_ttl_hours=1):
     """
     Fetch a single fixture by its API ID.
+
+    Args:
+        fixture_id: API-Football fixture ID.
+        cache_ttl_hours: How long to use cached response (0 = always fetch).
 
     Returns:
         fixture dict, or None.
     """
-    data = _get("/fixtures", {"id": str(fixture_id)}, cache_ttl_hours=1)
+    data = _get("/fixtures", {"id": str(fixture_id)}, cache_ttl_hours=cache_ttl_hours)
     if not data:
         return None
     response = data.get("response", [])

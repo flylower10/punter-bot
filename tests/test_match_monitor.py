@@ -323,3 +323,42 @@ class TestPollFixtures:
 
         results = poll_fixtures([55555], 1, lambda *a: None)
         assert results[55555] == "not_started"
+
+
+# --- Tests: cache bypass in refresh functions ---
+
+class TestRefreshCacheBypass:
+    def test_refresh_fixture_bypasses_cache(self, monkeypatch):
+        """refresh_fixture should pass cache_ttl_hours=0 to get_fixture_by_id."""
+        from src.services.fixture_service import refresh_fixture
+
+        calls = []
+
+        def mock_get_fixture_by_id(fixture_id, cache_ttl_hours=1):
+            calls.append({"fixture_id": fixture_id, "cache_ttl_hours": cache_ttl_hours})
+            return _make_fixture_data(api_id=fixture_id)
+
+        monkeypatch.setattr("src.services.fixture_service.get_fixture_by_id", mock_get_fixture_by_id)
+
+        _insert_fixture(api_id=77777, status="1H")
+        refresh_fixture(77777)
+
+        assert len(calls) == 1
+        assert calls[0]["cache_ttl_hours"] == 0
+
+    def test_refresh_fixtures_by_date_bypasses_cache(self, monkeypatch):
+        """refresh_fixtures_by_date should pass cache_ttl_hours=0 to get_fixtures_by_date."""
+        from src.services.fixture_service import refresh_fixtures_by_date
+
+        calls = []
+
+        def mock_get_fixtures_by_date(date_str, cache_ttl_hours=6):
+            calls.append({"date_str": date_str, "cache_ttl_hours": cache_ttl_hours})
+            return [_make_fixture_data(api_id=88888)]
+
+        monkeypatch.setattr("src.services.fixture_service.get_fixtures_by_date", mock_get_fixtures_by_date)
+
+        refresh_fixtures_by_date("2026-03-01")
+
+        assert len(calls) == 1
+        assert calls[0]["cache_ttl_hours"] == 0
