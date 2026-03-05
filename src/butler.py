@@ -94,7 +94,7 @@ def _strip_odds_for_display(text):
     return re.sub(r"\s+", " ", text).strip().rstrip(".,")
 
 
-def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None, first_of_week=False, last_pick=False, sport_clarification=None):
+def pick_confirmed(player, description, odds, is_update=False, placer=None, previous_description=None, first_of_week=False, last_pick=False, sport_clarification=None, picks_so_far=None):
     """Confirm a pick has been recorded."""
     formal = _formalize_pick(description)
 
@@ -120,6 +120,8 @@ def pick_confirmed(player, description, odds, is_update=False, placer=None, prev
 
     scenario = "pick_confirmed_first" if first_of_week and not is_update else "pick_confirmed"
     context = f"{player['formal_name']}'s pick recorded: {_strip_odds_for_display(formal)} @ {odds}."
+    if picks_so_far and picks_so_far > 1:
+        context += f" Pick {picks_so_far} this week."
     return _frame(template, context, scenario=scenario, player_name=_first_name(player))
 
 

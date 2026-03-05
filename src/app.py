@@ -498,11 +498,12 @@ def handle_cumulative_picks(cumulative):
         # Only confirm new picks or updates where something actually changed
         if changed:
             placer = get_next_placer() if data["odds_original"] == "placer" else None
-            first_of_week = not first_pick_used and not is_update and len(get_picks_for_week(week["id"])) == 1
+            picks_count = len(get_picks_for_week(week["id"]))
+            first_of_week = not first_pick_used and not is_update and picks_count == 1
             if first_of_week:
                 first_pick_used = True
             replies.append(
-                (player, data, is_update, placer, previous_description, first_of_week)
+                (player, data, is_update, placer, previous_description, first_of_week, picks_count)
             )
 
     # Check if all picks are now in — flag the last reply to skip LLM framing
@@ -510,7 +511,7 @@ def handle_cumulative_picks(cumulative):
     last_pick = not missing and all_picks_in(week["id"])
 
     confirmed_replies = []
-    for i, (player, data, is_update, placer, previous_description, first_of_week) in enumerate(replies):
+    for i, (player, data, is_update, placer, previous_description, first_of_week, picks_count) in enumerate(replies):
         is_last = last_pick and i == len(replies) - 1
         sport = data.get("sport", "")
         clarification = _gaa_clarification(sport, data["description"])
@@ -520,6 +521,7 @@ def handle_cumulative_picks(cumulative):
                 placer=placer, previous_description=previous_description,
                 first_of_week=first_of_week, last_pick=is_last,
                 sport_clarification=clarification,
+                picks_so_far=picks_count,
             )
         )
     replies = confirmed_replies
@@ -579,7 +581,8 @@ def handle_pick(parsed):
 
     # Build confirmation reply (single-pick always confirms)
     placer = get_next_placer() if data["odds_original"] == "placer" else None
-    first_of_week = not is_update and len(get_picks_for_week(week["id"])) == 1
+    week_picks = get_picks_for_week(week["id"])
+    first_of_week = not is_update and len(week_picks) == 1
     missing = get_missing_players(week["id"])
     last_pick = not missing and all_picks_in(week["id"])
     sport = data.get("sport", "")
@@ -589,6 +592,7 @@ def handle_pick(parsed):
         placer=placer, previous_description=previous_description,
         first_of_week=first_of_week, last_pick=last_pick,
         sport_clarification=clarification,
+        picks_so_far=len(week_picks),
     )
 
     # Individual early kickoff warning for this pick
