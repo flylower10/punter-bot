@@ -162,6 +162,12 @@ def detect_sport(text):
     if gaa:
         return gaa
 
+    # Handicap heuristic: football handicaps rarely exceed ±3.5.
+    # A large handicap (e.g. "Ireland -26") strongly suggests rugby.
+    m = re.search(r"(?<!\d)[+-]\s*(\d+\.?\d*)\b", text)
+    if m and float(m.group(1)) >= 4:
+        return "rugby"
+
     return "football"
 
 

@@ -400,6 +400,28 @@ class TestSportDetection:
     def test_liverpool_still_football(self):
         assert detect_sport("Liverpool 2/1") == "football"
 
+    def test_large_handicap_suggests_rugby(self):
+        """A handicap ≥ 4 with no keyword suggests rugby, not football."""
+        assert detect_sport("Ireland -26 1/2") == "rugby"
+
+    def test_large_handicap_positive(self):
+        assert detect_sport("Italy +14 3/1") == "rugby"
+
+    def test_small_handicap_stays_football(self):
+        """A handicap < 4 stays as football default."""
+        assert detect_sport("Arsenal -1.5 evens") == "football"
+
+    def test_handicap_3_5_stays_football(self):
+        assert detect_sport("Barcelona -3.5 2/1") == "football"
+
+    def test_handicap_keyword_overrides(self):
+        """If a rugby keyword is present, it wins regardless of handicap size."""
+        assert detect_sport("Leinster -7 4/5") == "rugby"
+
+    def test_nfl_keyword_with_large_handicap(self):
+        """NFL keyword should win over handicap heuristic."""
+        assert detect_sport("Chiefs -7 evens") == "nfl"
+
     def test_gaa_generic_keyword(self):
         assert detect_sport("GAA this weekend 3/1") == "gaa_football"
 
