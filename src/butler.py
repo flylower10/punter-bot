@@ -158,13 +158,11 @@ def all_picks_in(placer, picks=None):
         else:
             unmatched.append(pick)
 
-    lines = []
-    current_day = None
-
+    # Group matched picks by (day, time) for bundled display
+    groups = []  # list of (day_name, time_str, [(fixture, pick), ...])
     for pick in matched:
         ko = pick["kickoff"]
         if isinstance(ko, str):
-            # Parse ISO timestamp — try with and without timezone
             try:
                 dt = datetime.fromisoformat(ko)
             except ValueError:
@@ -177,16 +175,33 @@ def all_picks_in(placer, picks=None):
 
         day_name = dt_local.strftime("%A")
         time_str = dt_local.strftime("%-I:%M %p")
+        fixture = f"{pick.get('home_team', '?')} vs {pick.get('away_team', '?')}"
 
+        # Append to last group if same day+time, otherwise start new group
+        if groups and groups[-1][0] == day_name and groups[-1][1] == time_str:
+            groups[-1][2].append((fixture, pick))
+        else:
+            groups.append((day_name, time_str, [(fixture, pick)]))
+
+    lines = []
+    current_day = None
+    for day_name, time_str, fixture_picks in groups:
         if day_name != current_day:
+            if lines:
+                lines.append("")  # blank line before new day
             current_day = day_name
             lines.append(day_name)
+        elif lines:
+            lines.append("")  # blank line between time groups on same day
 
-        fixture = f"{pick.get('home_team', '?')} vs {pick.get('away_team', '?')}"
-        lines.append(f"\u23f0 {time_str} \u2014 {fixture}")
-        lines.append(_format_pick_line(pick))
+        lines.append(f"\u23f0 {time_str}")
+        for fixture, pick in fixture_picks:
+            lines.append(f"{fixture}")
+            lines.append(_format_pick_line(pick))
 
     if unmatched:
+        if lines:
+            lines.append("")
         lines.append("Kickoff TBC")
         for pick in unmatched:
             lines.append(_format_pick_line(pick))
