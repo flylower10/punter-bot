@@ -206,7 +206,7 @@ def get_unresulted_picks_for_week(week_id):
     picks = conn.execute(
         """SELECT p.api_fixture_id, f.kickoff
            FROM picks p
-           JOIN fixtures f ON f.api_id = p.api_fixture_id
+           JOIN fixtures f ON f.api_id = p.api_fixture_id AND f.sport = p.sport
            LEFT JOIN results r ON r.pick_id = p.id
            WHERE p.week_id = ? AND p.api_fixture_id IS NOT NULL AND r.id IS NULL
            ORDER BY f.kickoff""",

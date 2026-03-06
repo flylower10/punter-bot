@@ -271,7 +271,7 @@ def get_picks_for_week_by_kickoff(week_id):
         "FROM picks p "
         "JOIN players pl ON p.player_id = pl.id "
         "LEFT JOIN results r ON r.pick_id = p.id "
-        "LEFT JOIN fixtures f ON f.api_id = p.api_fixture_id "
+        "LEFT JOIN fixtures f ON f.api_id = p.api_fixture_id AND f.sport = p.sport "
         "WHERE p.week_id = ? "
         "ORDER BY f.kickoff IS NULL, f.kickoff, p.submitted_at",
         (week_id,),
