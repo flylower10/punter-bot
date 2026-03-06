@@ -24,7 +24,7 @@ def get_next_placer():
     # Standard rotation — find who placed last and get the next person
     last_week = conn.execute(
         "SELECT w.placer_id FROM weeks w "
-        "WHERE w.status = 'completed' AND w.placer_id IS NOT NULL "
+        "WHERE w.placer_id IS NOT NULL "
         "ORDER BY w.id DESC LIMIT 1"
     ).fetchone()
 
@@ -97,11 +97,11 @@ def get_rotation_display():
     """
     conn = get_db()
 
-    # Get last completed week's placer
+    # Get last week's placer (any status with a recorded placer)
     last_week = conn.execute(
         "SELECT w.*, pl.formal_name as placer_name FROM weeks w "
         "LEFT JOIN players pl ON w.placer_id = pl.id "
-        "WHERE w.status = 'completed' AND w.placer_id IS NOT NULL "
+        "WHERE w.placer_id IS NOT NULL "
         "ORDER BY w.id DESC LIMIT 1"
     ).fetchone()
     conn.close()
@@ -127,52 +127,51 @@ def _build_queue(next_placer):
     """
     Build the full rotation queue.
 
-    Always lists every player once in standard rotation order.
-    Penalty entries are inserted immediately before the player's
-    standard slot, so a player with a penalty appears twice (or more).
+    Penalty entries appear first at the top (in queue order).
+    Standard rotation follows from the player after the last placer,
+    independent of who is in the penalty queue.
     """
     players = get_rotation_order()
     conn = get_db()
 
     penalty_entries = conn.execute(
-        "SELECT rq.*, pl.formal_name FROM rotation_queue rq "
+        "SELECT rq.*, pl.formal_name, pl.emoji FROM rotation_queue rq "
         "JOIN players pl ON rq.player_id = pl.id "
         "WHERE rq.processed = 0 ORDER BY rq.position"
     ).fetchall()
+
+    # Find last placer to determine standard rotation start
+    last_week = conn.execute(
+        "SELECT w.placer_id FROM weeks w "
+        "WHERE w.placer_id IS NOT NULL "
+        "ORDER BY w.id DESC LIMIT 1"
+    ).fetchone()
     conn.close()
 
-    if not next_placer:
+    if not players:
         return []
 
-    # Group penalty entries by player_id
-    penalties_by_player = {}
-    for entry in penalty_entries:
-        pid = entry["player_id"]
-        if pid not in penalties_by_player:
-            penalties_by_player[pid] = []
-        penalties_by_player[pid].append(entry["reason"])
-
-    # Find start index in standard rotation
+    # Standard rotation starts after the last placer
     start_idx = 0
-    for i, p in enumerate(players):
-        if p["id"] == next_placer["id"]:
-            start_idx = i
-            break
+    if last_week and last_week["placer_id"]:
+        for i, p in enumerate(players):
+            if p["id"] == last_week["placer_id"]:
+                start_idx = (i + 1) % len(players)
+                break
 
+    # Penalty entries at the top
     queue = []
+    for entry in penalty_entries:
+        queue.append({
+            "formal_name": entry["formal_name"],
+            "emoji": entry["emoji"] or "",
+            "reason": entry["reason"],
+        })
+
+    # Standard rotation from correct position
     for offset in range(len(players)):
         idx = (start_idx + offset) % len(players)
         player = players[idx]
-
-        # Insert penalty turns before the player's standard turn
-        for reason in penalties_by_player.get(player["id"], []):
-            queue.append({
-                "formal_name": player["formal_name"],
-                "emoji": player.get("emoji", ""),
-                "reason": reason,
-            })
-
-        # Standard turn
         queue.append({
             "formal_name": player["formal_name"],
             "emoji": player.get("emoji", ""),
