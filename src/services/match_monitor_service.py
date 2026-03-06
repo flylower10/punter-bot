@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 
 
-def poll_fixtures(fixture_api_ids, week_id, send_fn):
+def poll_fixtures(fixture_api_ids, week_id, send_fn, sport=None):
     """
     Poll a batch of fixtures (sharing the same kickoff time).
     Posts new events (goals, red cards) and triggers auto-resulting on FT.
@@ -41,6 +41,7 @@ def poll_fixtures(fixture_api_ids, week_id, send_fn):
         fixture_api_ids: list of API-Football fixture IDs to check.
         week_id: current week ID.
         send_fn: callable(chat_id, text) to send messages.
+        sport: Sport name — prevents cross-sport fixture collisions.
 
     Returns:
         dict mapping fixture_api_id → status:
@@ -59,12 +60,12 @@ def poll_fixtures(fixture_api_ids, week_id, send_fn):
         return {fid: "error" for fid in fixture_api_ids}
 
     # Try kickoff batching: if we can fetch by date, do it in one call
-    _try_batch_refresh(fixture_api_ids)
+    _try_batch_refresh(fixture_api_ids, sport=sport)
 
     results = {}
     for api_id in fixture_api_ids:
         try:
-            status = _process_fixture(api_id, week_id, send_fn, target_group)
+            status = _process_fixture(api_id, week_id, send_fn, target_group, sport=sport)
             results[api_id] = status
         except Exception:
             logger.exception("Error processing fixture %s", api_id)
@@ -73,7 +74,7 @@ def poll_fixtures(fixture_api_ids, week_id, send_fn):
     return results
 
 
-def _try_batch_refresh(fixture_api_ids):
+def _try_batch_refresh(fixture_api_ids, sport=None):
     """
     If multiple fixtures share a kickoff date, refresh all fixtures for that
     date in a single API call instead of individual requests.
@@ -81,7 +82,7 @@ def _try_batch_refresh(fixture_api_ids):
     # Group fixtures by kickoff date
     date_groups = defaultdict(list)
     for api_id in fixture_api_ids:
-        fixture = get_fixture_by_api_id(api_id)
+        fixture = get_fixture_by_api_id(api_id, sport=sport)
         if fixture and fixture.get("kickoff"):
             try:
                 kickoff = datetime.fromisoformat(fixture["kickoff"])
@@ -99,17 +100,17 @@ def _try_batch_refresh(fixture_api_ids):
         else:
             # Single fixture: individual refresh
             for api_id in ids:
-                refresh_fixture(api_id)
+                refresh_fixture(api_id, sport=sport)
 
 
-def _process_fixture(api_id, week_id, send_fn, target_group):
+def _process_fixture(api_id, week_id, send_fn, target_group, sport=None):
     """
     Process a single fixture: post new events, trigger auto-result if FT.
 
     Returns:
         "completed", "live", "not_started", or "error"
     """
-    fixture = get_fixture_by_api_id(api_id)
+    fixture = get_fixture_by_api_id(api_id, sport=sport)
     if not fixture:
         return "error"
 
@@ -204,7 +205,7 @@ def get_unresulted_picks_for_week(week_id):
     """
     conn = get_db()
     picks = conn.execute(
-        """SELECT p.api_fixture_id, f.kickoff
+        """SELECT p.api_fixture_id, p.sport, f.kickoff
            FROM picks p
            JOIN fixtures f ON f.api_id = p.api_fixture_id AND f.sport = p.sport
            LEFT JOIN results r ON r.pick_id = p.id
@@ -213,4 +214,4 @@ def get_unresulted_picks_for_week(week_id):
         (week_id,),
     ).fetchall()
     conn.close()
-    return [{"api_fixture_id": p["api_fixture_id"], "kickoff": p["kickoff"]} for p in picks]
+    return [{"api_fixture_id": p["api_fixture_id"], "kickoff": p["kickoff"], "sport": p["sport"]} for p in picks]

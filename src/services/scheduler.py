@@ -141,7 +141,7 @@ def init_scheduler(send_message_fn):
     logger.info("Scheduler started with %d jobs", len(_scheduler.get_jobs()))
 
 
-def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id):
+def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id, sport=None):
     """
     Schedule polling jobs for a fixture's match window.
 
@@ -154,6 +154,7 @@ def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id):
         fixture_api_id: API-Football fixture ID.
         kickoff_iso: ISO-format kickoff timestamp.
         week_id: current week ID.
+        sport: Sport name — prevents cross-sport fixture collisions.
     """
     if not Config.MATCH_MONITOR_ENABLED:
         logger.debug("Match monitor disabled, not scheduling fixture %s", fixture_api_id)
@@ -201,12 +202,12 @@ def schedule_match_monitor(fixture_api_id, kickoff_iso, week_id):
         _job_monitor_fixture,
         "date",
         run_date=start_time,
-        args=[fixture_api_id, week_id, 0],
+        args=[fixture_api_id, week_id, 0, sport],
         id=job_id,
         misfire_grace_time=300,
     )
-    logger.info("Scheduled monitor for fixture %s at %s (week %s)",
-                fixture_api_id, start_time.isoformat(), week_id)
+    logger.info("Scheduled monitor for fixture %s at %s (week %s, sport=%s)",
+                fixture_api_id, start_time.isoformat(), week_id, sport)
 
 
 def schedule_monitors_for_week(week_id):
@@ -221,20 +222,20 @@ def schedule_monitors_for_week(week_id):
     picks = get_unresulted_picks_for_week(week_id)
 
     for pick in picks:
-        schedule_match_monitor(pick["api_fixture_id"], pick["kickoff"], week_id)
+        schedule_match_monitor(pick["api_fixture_id"], pick["kickoff"], week_id, sport=pick.get("sport"))
 
     if picks:
         logger.info("Startup: scheduled %d match monitors for week %s", len(picks), week_id)
 
 
-def _job_monitor_fixture(fixture_api_id, week_id, poll_count):
+def _job_monitor_fixture(fixture_api_id, week_id, poll_count, sport=None):
     """
     Single poll of a fixture. Posts events, checks for FT, and
     reschedules the next poll if the match isn't finished.
     """
     try:
         from src.services.match_monitor_service import poll_fixtures
-        results = poll_fixtures([fixture_api_id], week_id, _send_fn)
+        results = poll_fixtures([fixture_api_id], week_id, _send_fn, sport=sport)
         status = results.get(fixture_api_id, "error")
 
         tz = pytz.timezone(Config.TIMEZONE)
@@ -249,7 +250,7 @@ def _job_monitor_fixture(fixture_api_id, week_id, poll_count):
 
         # Determine next poll interval
         from src.services.fixture_service import get_fixture_by_api_id
-        fixture = get_fixture_by_api_id(fixture_api_id)
+        fixture = get_fixture_by_api_id(fixture_api_id, sport=sport)
         if fixture and fixture.get("kickoff"):
             try:
                 kickoff = datetime.fromisoformat(fixture["kickoff"])
@@ -281,7 +282,7 @@ def _job_monitor_fixture(fixture_api_id, week_id, poll_count):
             _job_monitor_fixture,
             "date",
             run_date=next_poll,
-            args=[fixture_api_id, week_id, next_count],
+            args=[fixture_api_id, week_id, next_count, sport],
             id=job_id,
             replace_existing=True,
             misfire_grace_time=300,

@@ -55,9 +55,10 @@ def auto_result_week(week_id):
             continue
 
         # Refresh the fixture to get latest score
-        fixture = refresh_fixture(fixture_id)
+        pick_sport = pick.get("sport")
+        fixture = refresh_fixture(fixture_id, sport=pick_sport)
         if not fixture:
-            fixture = get_fixture_by_api_id(fixture_id)
+            fixture = get_fixture_by_api_id(fixture_id, sport=pick_sport)
         if not fixture:
             continue
 
@@ -159,7 +160,7 @@ def auto_result_fixture(api_fixture_id, week_id):
     if existing:
         return []
 
-    fixture = get_fixture_by_api_id(api_fixture_id)
+    fixture = get_fixture_by_api_id(api_fixture_id, sport=pick.get("sport"))
     if not fixture:
         return []
 

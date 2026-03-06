@@ -327,17 +327,28 @@ def get_completed_fixtures():
     return [dict(f) for f in fixtures]
 
 
-def get_fixture_by_api_id(api_id):
-    """Look up a cached fixture by its API-Football ID."""
+def get_fixture_by_api_id(api_id, sport=None):
+    """Look up a cached fixture by its API-Football ID.
+
+    Args:
+        api_id: API fixture ID.
+        sport: Optional sport filter — avoids cross-sport collisions where
+               different sports share the same numeric API ID.
+    """
     conn = get_db()
-    fixture = conn.execute(
-        "SELECT * FROM fixtures WHERE api_id = ?", (api_id,)
-    ).fetchone()
+    if sport:
+        fixture = conn.execute(
+            "SELECT * FROM fixtures WHERE api_id = ? AND sport = ?", (api_id, sport)
+        ).fetchone()
+    else:
+        fixture = conn.execute(
+            "SELECT * FROM fixtures WHERE api_id = ?", (api_id,)
+        ).fetchone()
     conn.close()
     return dict(fixture) if fixture else None
 
 
-def refresh_fixture(api_id):
+def refresh_fixture(api_id, sport=None):
     """
     Re-fetch a single fixture from API-Football and update the cache.
     Used to check for score updates during auto-resulting.
@@ -345,7 +356,7 @@ def refresh_fixture(api_id):
     fixture_data = get_fixture_by_id(api_id, cache_ttl_hours=0)
     if fixture_data:
         _cache_fixtures([fixture_data])
-        return get_fixture_by_api_id(api_id)
+        return get_fixture_by_api_id(api_id, sport=sport)
     return None
 
 

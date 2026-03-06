@@ -252,7 +252,7 @@ def _match_by_llm(description, bet_type, sport="football"):
 
         # Look up the fixture in our cache
         from src.services.fixture_service import get_fixture_by_api_id
-        fixture = get_fixture_by_api_id(fixture_id)
+        fixture = get_fixture_by_api_id(fixture_id, sport=sport)
         if fixture:
             result = _fixture_to_enrichment(fixture)
             result["market_type"] = bet_type

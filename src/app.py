@@ -597,7 +597,7 @@ def handle_pick(parsed):
 
     # Individual early kickoff warning for this pick
     if pick.get("api_fixture_id"):
-        fixture = get_fixture_by_api_id(pick["api_fixture_id"])
+        fixture = get_fixture_by_api_id(pick["api_fixture_id"], sport=pick.get("sport"))
         if fixture:
             note = butler._early_kickoff_note(fixture.get("kickoff"))
             if note:

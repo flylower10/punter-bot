@@ -293,7 +293,7 @@ class TestPollFixtures:
 
         # Disable actual API refresh (we've already set the data)
         monkeypatch.setattr(
-            "src.services.match_monitor_service.refresh_fixture", lambda x: None
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
         )
         monkeypatch.setattr(
             "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
@@ -315,7 +315,7 @@ class TestPollFixtures:
         _insert_fixture(api_id=55555, status="NS")
 
         monkeypatch.setattr(
-            "src.services.match_monitor_service.refresh_fixture", lambda x: None
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
         )
         monkeypatch.setattr(
             "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0

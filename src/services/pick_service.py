@@ -177,12 +177,13 @@ def _try_schedule_monitor(enrichment, week_id):
     api_fixture_id = enrichment.get("api_fixture_id")
     if not api_fixture_id:
         return
+    sport = enrichment.get("sport")
     try:
         from src.services.fixture_service import get_fixture_by_api_id
-        fixture = get_fixture_by_api_id(api_fixture_id)
+        fixture = get_fixture_by_api_id(api_fixture_id, sport=sport)
         if fixture and fixture.get("kickoff"):
             from src.services.scheduler import schedule_match_monitor
-            schedule_match_monitor(api_fixture_id, fixture["kickoff"], week_id)
+            schedule_match_monitor(api_fixture_id, fixture["kickoff"], week_id, sport=sport)
     except Exception as e:
         logger.warning("Failed to schedule match monitor (non-blocking): %s", e)
 
