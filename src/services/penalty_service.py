@@ -113,6 +113,19 @@ def get_pending_penalty_for_player(nickname):
     return dict(penalty) if penalty else None
 
 
+def get_pending_penalty_for_player_id(player_id):
+    """Return the most recent pending penalty for a player by player ID."""
+    conn = get_db()
+    penalty = conn.execute(
+        "SELECT p.* FROM penalties p "
+        "WHERE p.status = 'suggested' AND p.player_id = ? "
+        "ORDER BY p.created_at DESC LIMIT 1",
+        (player_id,),
+    ).fetchone()
+    conn.close()
+    return dict(penalty) if penalty else None
+
+
 def get_vault_total():
     """Return the total vault balance."""
     conn = get_db()

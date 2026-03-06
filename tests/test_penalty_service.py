@@ -2,7 +2,8 @@
 
 from src.services.penalty_service import (
     suggest_penalty, confirm_penalty, get_pending_penalties,
-    get_pending_penalty_for_player, get_vault_total,
+    get_pending_penalty_for_player, get_pending_penalty_for_player_id,
+    get_vault_total,
 )
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
@@ -97,6 +98,20 @@ class TestPendingPenalties:
 
     def test_get_pending_for_unknown_player(self):
         penalty = get_pending_penalty_for_player("NonexistentPlayer")
+        assert penalty is None
+
+    def test_get_pending_for_player_id(self):
+        week = get_or_create_current_week()
+        players = get_all_players()
+
+        suggest_penalty(players[0]["id"], week["id"], "streak_3")
+
+        penalty = get_pending_penalty_for_player_id(players[0]["id"])
+        assert penalty is not None
+        assert penalty["type"] == "streak_3"
+
+    def test_get_pending_for_unknown_player_id(self):
+        penalty = get_pending_penalty_for_player_id(999)
         assert penalty is None
 
 

@@ -26,7 +26,8 @@ from src.services.result_service import (
 )
 from src.services.penalty_service import (
     suggest_penalty, confirm_penalty, get_pending_penalties,
-    get_pending_penalty_for_player, get_vault_total,
+    get_pending_penalty_for_player, get_pending_penalty_for_player_id,
+    get_vault_total,
 )
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue, get_rotation_display, advance_rotation
 from src.services.stats_service import get_player_stats, get_leaderboard
@@ -235,37 +236,51 @@ def _cmd_rotation():
 
 
 def _cmd_confirm(parsed, args):
-    """!confirm penalty [player] — Ed only."""
+    """!confirm [penalty] [player] — Ed only. 'penalty' keyword is optional."""
     if not _is_authorized_admin(parsed):
         return "Only an admin may confirm penalties."
 
-    if not args or args[0].lower() != "penalty":
-        return "Usage: !confirm penalty [player]"
-
-    if len(args) < 2:
-        # Show pending penalties
+    # No args → list pending penalties
+    if not args:
         pending = get_pending_penalties()
         if not pending:
             return "No penalties awaiting confirmation."
         lines = ["Pending penalties:"]
         for p in pending:
-            lines.append(f"- {p['formal_name']}: {p['type']} — !confirm penalty {p['nickname']}")
+            lines.append(f"- {p['formal_name']}: {p['type']} — !confirm {p['nickname']}")
         return "\n".join(lines)
 
-    # Confirm a specific player's penalty
-    nickname = args[1]
-    penalty = get_pending_penalty_for_player(nickname)
+    # Strip optional "penalty" keyword
+    if args[0].lower() == "penalty":
+        player_args = args[1:]
+    else:
+        player_args = args
+
+    # No player name after keyword → list pending
+    if not player_args:
+        pending = get_pending_penalties()
+        if not pending:
+            return "No penalties awaiting confirmation."
+        lines = ["Pending penalties:"]
+        for p in pending:
+            lines.append(f"- {p['formal_name']}: {p['type']} — !confirm {p['nickname']}")
+        return "\n".join(lines)
+
+    # Resolve player via lookup_player (handles nickname, name, aliases)
+    player_name = " ".join(player_args)
+    player = lookup_player(sender_name=player_name)
+    if not player:
+        return f"No player found matching '{player_name}'."
+
+    penalty = get_pending_penalty_for_player_id(player["id"])
     if not penalty:
-        return f"No pending penalty found for '{nickname}'."
+        return f"No pending penalty found for {player['formal_name']}."
 
     result = confirm_penalty(penalty["id"], confirmed_by=parsed["sender"])
     if not result:
         return "Penalty could not be confirmed."
 
     confirmed, vault_total = result
-    player = lookup_player(sender_name=nickname)
-    if not player:
-        player = {"formal_name": nickname}
 
     # If it's a streak_3 penalty, add to rotation queue
     if confirmed["type"] == "streak_3":
