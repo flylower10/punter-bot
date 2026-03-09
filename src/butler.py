@@ -230,34 +230,24 @@ def result_announced(player, description, odds, outcome, streak=None, acca_lost=
     display_text = _strip_odds_for_display(formal) if odds != "placer" else formal
 
     if outcome == "win":
-        verdict = "\u2705 Winner."
-        prefix = "I'm pleased to report"
+        emoji = "\u2705"
         scenario = "result_win_acca_lost" if acca_lost else "result_win"
     elif outcome == "loss":
-        verdict = "\u274c Lost."
-        prefix = "I'm afraid"
+        streak_num = 1
         if streak and streak.endswith("L"):
             streak_num = int(streak[:-1])
-            # Streak scenarios take priority over acca_lost
-            if streak_num in (3, 5, 7):
-                scenario = f"result_streak_{streak_num}"
-            elif acca_lost:
-                scenario = "result_loss_acca_lost"
-            else:
-                scenario = "result_loss"
+        emoji = "\u274c" * streak_num
+        if streak_num in (3, 5, 7):
+            scenario = f"result_streak_{streak_num}"
         elif acca_lost:
             scenario = "result_loss_acca_lost"
         else:
             scenario = "result_loss"
     else:
-        verdict = "Void."
-        prefix = "I must inform you"
+        emoji = "Void"
         scenario = "result_loss"
 
-    template = (
-        f"{prefix} \u2014 {player['formal_name']}'s selection: "
-        f"{display_text} @ {odds}.  {verdict}"
-    )
+    template = f"{player['formal_name']} {emoji} \u2014 {display_text} @ {odds}"
 
     streak_ctx = f" ({streak} streak)" if streak else ""
     if acca_lost and losers:

@@ -37,6 +37,18 @@ def record_result(pick_id, outcome, confirmed_by=""):
     return dict(result)
 
 
+def week_has_loss(week_id):
+    """Check if any pick in this week has a recorded loss."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT 1 FROM results r JOIN picks p ON r.pick_id = p.id "
+        "WHERE p.week_id = ? AND r.outcome = 'loss' LIMIT 1",
+        (week_id,),
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 def get_consecutive_losses(player_id):
     """
     Count the current consecutive loss streak for a player.

@@ -24,6 +24,7 @@ from src.services.fixture_service import (
     refresh_fixtures_by_date,
 )
 from src.services.auto_result_service import auto_result_fixture, COMPLETED_STATUSES
+from src.services.result_service import week_has_loss
 import src.butler as butler
 
 logger = logging.getLogger(__name__)
@@ -119,22 +120,25 @@ def _process_fixture(api_id, week_id, send_fn, target_group, sport=None):
     if status == "NS" or status == "TBD":
         return "not_started"
 
-    # Post any new events (goals, red cards)
-    if fixture.get("raw_json"):
+    # Suppress live updates once any pick in the week has lost (acca is dead)
+    acca_alive = not week_has_loss(week_id)
+
+    # Post any new events (goals, red cards) — only if acca still alive
+    if acca_alive and fixture.get("raw_json"):
         _post_new_events(fixture, send_fn, target_group)
 
     # Check if match is finished
     if status in COMPLETED_STATUSES:
-        # Post final score
-        ft_msg = butler.match_ended(
-            fixture["home_team"], fixture["away_team"],
-            fixture.get("home_score", "?"), fixture.get("away_score", "?"),
-        )
-        # Only post FT if we haven't already (check fixture_events for FT key)
-        if _record_event_if_new(api_id, f"FT_{api_id}", "FT", "Full Time"):
-            send_fn(target_group, ft_msg)
+        # Post final score — only if acca still alive
+        if acca_alive:
+            ft_msg = butler.match_ended(
+                fixture["home_team"], fixture["away_team"],
+                fixture.get("home_score", "?"), fixture.get("away_score", "?"),
+            )
+            if _record_event_if_new(api_id, f"FT_{api_id}", "FT", "Full Time"):
+                send_fn(target_group, ft_msg)
 
-        # Trigger auto-result for the pick linked to this fixture
+        # Always trigger auto-result (pick results + week summary still post)
         announcements = auto_result_fixture(api_id, week_id)
         for msg in announcements:
             send_fn(target_group, msg)

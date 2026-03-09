@@ -39,11 +39,12 @@ def get_player_stats(player_id):
             streak_count += 1
         else:
             break
-    streak = f"{streak_count}{'W' if streak_type == 'win' else 'L'}"
+    streak_emoji = "\u2705" if streak_type == "win" else "\u274c"
+    streak = streak_emoji * streak_count
 
     # Form: last 10 results (most recent first, displayed left to right)
     form_results = outcomes[:10]
-    form = "".join("W" if o == "win" else "L" for o in reversed(form_results))
+    form = "".join("\u2705" if o == "win" else "\u274c" for o in reversed(form_results))
 
     return {
         "wins": wins,

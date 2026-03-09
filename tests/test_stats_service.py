@@ -29,8 +29,8 @@ class TestPlayerStats:
         assert stats["losses"] == 0
         assert stats["total"] == 1
         assert stats["win_rate"] == 100.0
-        assert stats["streak"] == "1W"
-        assert stats["form"] == "W"
+        assert stats["streak"] == "\u2705"
+        assert stats["form"] == "\u2705"
 
     def test_mixed_results(self):
         week = get_or_create_current_week()

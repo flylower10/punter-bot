@@ -13,7 +13,7 @@ from src.services.auto_result_service import auto_result_fixture, COMPLETED_STAT
 from src.services.pick_service import submit_pick
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
-from src.services.result_service import record_result
+from src.services.result_service import record_result, week_has_loss
 import src.butler as butler
 
 
@@ -362,3 +362,176 @@ class TestRefreshCacheBypass:
 
         assert len(calls) == 1
         assert calls[0]["cache_ttl_hours"] == 0
+
+
+# --- Tests: acca loss suppression ---
+
+class TestAccaLossSuppression:
+    """Live events should be suppressed once any pick in the week has lost."""
+
+    def test_week_has_loss_false_when_no_results(self):
+        week = get_or_create_current_week()
+        assert week_has_loss(week["id"]) is False
+
+    def test_week_has_loss_false_when_only_wins(self):
+        week, player, pick = _setup_pick_with_fixture()
+        record_result(pick["id"], "win", confirmed_by="auto")
+        assert week_has_loss(week["id"]) is False
+
+    def test_week_has_loss_true_when_loss_recorded(self):
+        week, player, pick = _setup_pick_with_fixture()
+        record_result(pick["id"], "loss", confirmed_by="auto")
+        assert week_has_loss(week["id"]) is True
+
+    def test_live_events_post_when_acca_alive(self, monkeypatch):
+        """Goals and FT should post when no losses exist."""
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_ENABLED", True)
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_GROUP_ID", "test-group")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "main-group")
+
+        week, player, pick = _setup_pick_with_fixture(
+            api_id=60001, fixture_status="FT",
+        )
+
+        events = [
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 15},
+             "team": {"name": "Liverpool"}, "player": {"name": "Salah"}},
+        ]
+        fixture_data = _make_fixture_data(api_id=60001, status="FT", events=events)
+        conn = get_db()
+        conn.execute(
+            "UPDATE fixtures SET home_score = 2, away_score = 1, status = 'FT', "
+            "raw_json = ? WHERE api_id = 60001",
+            (json.dumps(fixture_data),),
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
+        )
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
+        )
+
+        messages = []
+        def capture_send(chat_id, text):
+            messages.append(text)
+
+        poll_fixtures([60001], week["id"], capture_send)
+
+        # Should have goal event + FT + result announcement
+        has_goal = any("Salah" in m for m in messages)
+        has_ft = any("FT:" in m for m in messages)
+        assert has_goal, f"Expected goal event, got: {messages}"
+        assert has_ft, f"Expected FT message, got: {messages}"
+
+    def test_live_events_suppressed_when_acca_lost(self, monkeypatch):
+        """Goals and FT should NOT post when a loss already exists, but result should."""
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_ENABLED", True)
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_GROUP_ID", "test-group")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "main-group")
+
+        # Create two picks: one already lost, one still pending
+        week, player1, pick1 = _setup_pick_with_fixture(
+            player_idx=0, api_id=60010, fixture_status="FT",
+            home="Chelsea", away="Everton", description="Chelsea to win",
+        )
+        # Record a loss on the first pick
+        record_result(pick1["id"], "loss", confirmed_by="auto")
+
+        # Second pick with a different fixture
+        players = get_all_players()
+        player2 = players[1]
+        _insert_fixture(api_id=60011, status="FT", home="Liverpool", away="Arsenal",
+                        home_score=2, away_score=1)
+        pick2, _, _, _ = submit_pick(player2["id"], week["id"], "Liverpool to win", 2.0, "evens", "win")
+        conn = get_db()
+        conn.execute("UPDATE picks SET api_fixture_id = 60011 WHERE id = ?", (pick2["id"],))
+        conn.commit()
+        conn.close()
+
+        events = [
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 23},
+             "team": {"name": "Liverpool"}, "player": {"name": "Salah"}},
+        ]
+        fixture_data = _make_fixture_data(api_id=60011, status="FT", events=events,
+                                           home="Liverpool", away="Arsenal")
+        conn = get_db()
+        conn.execute(
+            "UPDATE fixtures SET home_score = 2, away_score = 1, status = 'FT', "
+            "raw_json = ? WHERE api_id = 60011",
+            (json.dumps(fixture_data),),
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
+        )
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
+        )
+
+        messages = []
+        def capture_send(chat_id, text):
+            messages.append(text)
+
+        poll_fixtures([60011], week["id"], capture_send)
+
+        # Goal and FT events should be suppressed
+        has_goal = any("Salah" in m for m in messages)
+        has_ft = any("FT:" in m for m in messages)
+        assert not has_goal, f"Goal should be suppressed, got: {messages}"
+        assert not has_ft, f"FT should be suppressed, got: {messages}"
+
+    def test_auto_result_still_posts_when_acca_lost(self, monkeypatch):
+        """Pick result announcements should still post even when acca is dead."""
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_ENABLED", True)
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_GROUP_ID", "test-group")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "main-group")
+
+        # First pick: already lost
+        week, player1, pick1 = _setup_pick_with_fixture(
+            player_idx=0, api_id=60020, fixture_status="FT",
+            home="Chelsea", away="Everton", description="Chelsea to win",
+        )
+        record_result(pick1["id"], "loss", confirmed_by="auto")
+
+        # Second pick: linked to fixture about to be auto-resulted
+        players = get_all_players()
+        player2 = players[1]
+        _insert_fixture(api_id=60021, status="FT", home="Liverpool", away="Arsenal",
+                        home_score=2, away_score=1)
+        pick2, _, _, _ = submit_pick(player2["id"], week["id"], "Liverpool to win", 2.0, "evens", "win")
+        conn = get_db()
+        conn.execute("UPDATE picks SET api_fixture_id = 60021 WHERE id = ?", (pick2["id"],))
+        conn.commit()
+        conn.close()
+
+        fixture_data = _make_fixture_data(api_id=60021, status="FT",
+                                           home="Liverpool", away="Arsenal")
+        conn = get_db()
+        conn.execute(
+            "UPDATE fixtures SET home_score = 2, away_score = 1, status = 'FT', "
+            "raw_json = ? WHERE api_id = 60021",
+            (json.dumps(fixture_data),),
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
+        )
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
+        )
+
+        messages = []
+        def capture_send(chat_id, text):
+            messages.append(text)
+
+        poll_fixtures([60021], week["id"], capture_send)
+
+        # Auto-result announcement should still be posted
+        assert len(messages) >= 1, "Expected at least one auto-result announcement"
