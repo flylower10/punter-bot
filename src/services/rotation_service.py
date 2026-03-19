@@ -45,8 +45,11 @@ def get_next_placer():
     return players[0]
 
 
-def add_to_penalty_queue(player_id, reason, week_id=None):
-    """Add a player to the penalty rotation queue."""
+def add_to_penalty_queue(player_id, reason, week_id=None, front=False):
+    """Add a player to the penalty rotation queue.
+
+    If front=True, insert at position 1 and bump all existing entries down.
+    """
     conn = get_db()
 
     # Don't add if already in queue
@@ -58,15 +61,20 @@ def add_to_penalty_queue(player_id, reason, week_id=None):
         conn.close()
         return
 
-    # Get the next position
-    max_pos = conn.execute(
-        "SELECT COALESCE(MAX(position), 0) FROM rotation_queue WHERE processed = 0"
-    ).fetchone()[0]
+    if front:
+        conn.execute(
+            "UPDATE rotation_queue SET position = position + 1 WHERE processed = 0"
+        )
+        position = 1
+    else:
+        position = conn.execute(
+            "SELECT COALESCE(MAX(position), 0) FROM rotation_queue WHERE processed = 0"
+        ).fetchone()[0] + 1
 
     conn.execute(
         "INSERT INTO rotation_queue (player_id, reason, position, week_added, processed) "
         "VALUES (?, ?, ?, ?, 0)",
-        (player_id, reason, max_pos + 1, week_id),
+        (player_id, reason, position, week_id),
     )
     conn.commit()
     conn.close()

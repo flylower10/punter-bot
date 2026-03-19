@@ -116,7 +116,7 @@ def auto_result_week(week_id):
         complete_week(week_id)
         losers = [r for r in results if r["outcome"] == "loss"]
         if len(losers) == 1:
-            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id)
+            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id, front=True)
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
 
@@ -219,7 +219,7 @@ def auto_result_fixture(api_fixture_id, week_id):
         complete_week(week_id)
         losers = [r for r in results if r["outcome"] == "loss"]
         if len(losers) == 1:
-            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id)
+            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week_id, front=True)
         leaderboard = get_leaderboard()
         next_placer = get_next_placer()
 
