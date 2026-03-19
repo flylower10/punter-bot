@@ -60,13 +60,6 @@ def get_or_create_current_week(group_id="default"):
     ).fetchone()
     conn.close()
 
-    # New week = new persona
-    try:
-        from src.llm_client import reset_persona
-        reset_persona()
-    except Exception:
-        pass
-
     return dict(week)
 
 

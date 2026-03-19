@@ -34,12 +34,8 @@ CREATE TABLE IF NOT EXISTS picks (
     odds_original TEXT NOT NULL,
     bet_type TEXT NOT NULL DEFAULT 'win' CHECK (bet_type IN ('win', 'btts', 'handicap', 'over_under', 'ht_ft', 'other')),
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_late INTEGER NOT NULL DEFAULT 0,
     -- Enrichment columns (populated by API matching, nullable)
     sport TEXT,
-    competition TEXT,
-    event_name TEXT,
-    market_type TEXT,
     api_fixture_id INTEGER,
     market_price REAL,
     confirmed_odds REAL,

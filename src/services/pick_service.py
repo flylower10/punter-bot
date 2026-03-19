@@ -3,7 +3,6 @@ from datetime import datetime
 
 from src.db import get_db
 from src.services.player_service import get_all_players
-from src.services.week_service import is_past_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,6 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
         (week_id, player_id),
     ).fetchone()
 
-    is_late = 1 if is_past_deadline() else 0
     previous_description = None
 
     # Detect sport from pick text if not provided by caller
@@ -50,29 +48,24 @@ def submit_pick(player_id, week_id, description, odds_decimal, odds_original, be
         )
         conn.execute(
             "UPDATE picks SET description = ?, odds_decimal = ?, odds_original = ?, "
-            "bet_type = ?, submitted_at = ?, is_late = ?, "
-            "sport = ?, competition = ?, event_name = ?, market_type = ?, "
-            "api_fixture_id = ?, market_price = ? "
+            "bet_type = ?, submitted_at = ?, "
+            "sport = ?, api_fixture_id = ?, market_price = ? "
             "WHERE week_id = ? AND player_id = ?",
             (description, odds_decimal, odds_original, bet_type,
-             datetime.utcnow().isoformat(), is_late,
-             pick_sport, enrichment.get("competition"),
-             enrichment.get("event_name"), enrichment.get("market_type"),
-             enrichment.get("api_fixture_id"), enrichment.get("market_price"),
+             datetime.utcnow().isoformat(),
+             pick_sport, enrichment.get("api_fixture_id"), enrichment.get("market_price"),
              week_id, player_id),
         )
         is_update = True
     else:
         conn.execute(
             "INSERT INTO picks (week_id, player_id, description, odds_decimal, "
-            "odds_original, bet_type, submitted_at, is_late, "
-            "sport, competition, event_name, market_type, api_fixture_id, market_price) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "odds_original, bet_type, submitted_at, "
+            "sport, api_fixture_id, market_price) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (week_id, player_id, description, odds_decimal, odds_original,
-             bet_type, datetime.utcnow().isoformat(), is_late,
-             pick_sport, enrichment.get("competition"),
-             enrichment.get("event_name"), enrichment.get("market_type"),
-             enrichment.get("api_fixture_id"), enrichment.get("market_price")),
+             bet_type, datetime.utcnow().isoformat(),
+             pick_sport, enrichment.get("api_fixture_id"), enrichment.get("market_price")),
         )
         is_update = False
         changed = True
@@ -217,11 +210,9 @@ def re_enrich_unmatched_picks(week_id):
         if enrichment.get("api_fixture_id"):
             conn = get_db()
             conn.execute(
-                "UPDATE picks SET sport = ?, competition = ?, event_name = ?, "
-                "market_type = ?, api_fixture_id = ?, market_price = ? "
+                "UPDATE picks SET sport = ?, api_fixture_id = ?, market_price = ? "
                 "WHERE id = ?",
-                (enrichment.get("sport"), enrichment.get("competition"),
-                 enrichment.get("event_name"), enrichment.get("market_type"),
+                (enrichment.get("sport"),
                  enrichment.get("api_fixture_id"), enrichment.get("market_price"),
                  pick["id"]),
             )

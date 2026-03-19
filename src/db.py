@@ -36,6 +36,7 @@ def _run_migrations(conn):
     """Apply schema migrations for existing databases."""
     _migrate_weeks_group_id(conn)
     _migrate_picks_enrichment(conn)
+    _migrate_picks_drop_dead_columns(conn)
     _migrate_fixture_events(conn)
     _migrate_team_aliases_sport(conn)
     _migrate_players_aliases(conn)
@@ -82,9 +83,6 @@ def _migrate_picks_enrichment(conn):
     """Add enrichment columns to picks table (Step 1 schema changes)."""
     new_cols = [
         ("sport", "TEXT"),
-        ("competition", "TEXT"),
-        ("event_name", "TEXT"),
-        ("market_type", "TEXT"),
         ("api_fixture_id", "INTEGER"),
         ("market_price", "REAL"),
         ("confirmed_odds", "REAL"),
@@ -92,6 +90,15 @@ def _migrate_picks_enrichment(conn):
     for col_name, col_type in new_cols:
         if not _column_exists(conn, "picks", col_name):
             conn.execute(f"ALTER TABLE picks ADD COLUMN {col_name} {col_type}")
+    conn.commit()
+
+
+def _migrate_picks_drop_dead_columns(conn):
+    """Drop unused picks columns: is_late, competition, event_name, market_type."""
+    dead_cols = ["is_late", "competition", "event_name", "market_type"]
+    for col in dead_cols:
+        if _column_exists(conn, "picks", col):
+            conn.execute(f"ALTER TABLE picks DROP COLUMN {col}")
     conn.commit()
 
 

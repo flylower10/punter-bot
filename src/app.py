@@ -26,8 +26,8 @@ from src.services.result_service import (
 )
 from src.services.penalty_service import (
     suggest_penalty, confirm_penalty, get_pending_penalties,
-    get_pending_penalty_for_player, get_pending_penalty_for_player_id,
-    get_vault_total,
+    get_pending_penalty_for_player_id,
+    get_vault_total, PENALTY_THRESHOLDS, PENALTY_AMOUNTS,
 )
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue, get_rotation_display, advance_rotation
 from src.services.stats_service import get_player_stats, get_leaderboard
@@ -694,13 +694,10 @@ def handle_result(parsed):
         target_player, pick["description"], pick["odds_original"], data["outcome"],
         streak=streak_str, acca_lost=acca_lost, losers=losers,
     )
-    penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
-    penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}
-
-    if streak in penalty_thresholds:
-        suggest_penalty(target_player["id"], week["id"], penalty_thresholds[streak])
+    if streak in PENALTY_THRESHOLDS:
+        suggest_penalty(target_player["id"], week["id"], PENALTY_THRESHOLDS[streak])
         reply += "\n\n" + butler.penalty_suggested(
-            target_player, streak, penalty_thresholds[streak], penalty_amounts[streak]
+            target_player, streak, PENALTY_THRESHOLDS[streak], PENALTY_AMOUNTS[PENALTY_THRESHOLDS[streak]]
         )
 
     # Check if all results are in — publish combined week summary (no separate Monday recap)

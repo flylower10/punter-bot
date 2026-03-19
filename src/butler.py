@@ -459,16 +459,7 @@ def picks_display(picks, week_number=None):
 
     body = "\n".join(lines)
 
-    kicker = _picks_kicker(pick_summaries)
-    if kicker:
-        body += f"\n\n{kicker}"
-
     return body
-
-
-def _picks_kicker(pick_summaries):
-    """Generate a short one-liner comment on the week's picks. Reserved for shadow/LLM testing."""
-    return None
 
 
 def banter_reply(sender, body, player=None):

@@ -286,35 +286,22 @@ def get_upcoming_fixtures(days_ahead=4, sport=None, include_started=False):
     now = datetime.now(tz)
     cutoff = (now + timedelta(days=days_ahead)).isoformat()
 
-    conn = get_db()
     if include_started:
-        # Include all fixtures from the last 3 days through the lookahead window
-        lookback = (now - timedelta(days=3)).isoformat()
-        if sport:
-            fixtures = conn.execute(
-                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-                "AND sport = ? ORDER BY kickoff",
-                (lookback, cutoff, sport),
-            ).fetchall()
-        else:
-            fixtures = conn.execute(
-                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-                "ORDER BY kickoff",
-                (lookback, cutoff),
-            ).fetchall()
+        start = (now - timedelta(days=3)).isoformat()
     else:
-        if sport:
-            fixtures = conn.execute(
-                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-                "AND status IN ('NS', 'TBD') AND sport = ? ORDER BY kickoff",
-                (now.isoformat(), cutoff, sport),
-            ).fetchall()
-        else:
-            fixtures = conn.execute(
-                "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ? "
-                "AND status IN ('NS', 'TBD') ORDER BY kickoff",
-                (now.isoformat(), cutoff),
-            ).fetchall()
+        start = now.isoformat()
+
+    sql = "SELECT * FROM fixtures WHERE kickoff > ? AND kickoff < ?"
+    params = [start, cutoff]
+    if not include_started:
+        sql += " AND status IN ('NS', 'TBD')"
+    if sport:
+        sql += " AND sport = ?"
+        params.append(sport)
+    sql += " ORDER BY kickoff"
+
+    conn = get_db()
+    fixtures = conn.execute(sql, params).fetchall()
     conn.close()
     return [dict(f) for f in fixtures]
 

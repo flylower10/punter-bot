@@ -128,6 +128,3 @@ def get_emoji_to_player_map():
     return result
 
 
-def lookup_player_by_emoji(emoji):
-    """Return player dict for the given emoji, or None."""
-    return get_emoji_to_player_map().get((emoji or "").strip())

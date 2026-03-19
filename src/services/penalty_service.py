@@ -11,6 +11,9 @@ PENALTY_AMOUNTS = {
     "streak_10": 200,
 }
 
+# Maps consecutive loss count → penalty type string
+PENALTY_THRESHOLDS = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
+
 
 def suggest_penalty(player_id, week_id, penalty_type):
     """
@@ -98,19 +101,6 @@ def get_pending_penalties():
     conn.close()
     return [dict(p) for p in penalties]
 
-
-def get_pending_penalty_for_player(nickname):
-    """Return the most recent pending penalty for a player by nickname."""
-    conn = get_db()
-    penalty = conn.execute(
-        "SELECT p.* FROM penalties p "
-        "JOIN players pl ON p.player_id = pl.id "
-        "WHERE p.status = 'suggested' AND LOWER(pl.nickname) = LOWER(?) "
-        "ORDER BY p.created_at DESC LIMIT 1",
-        (nickname,),
-    ).fetchone()
-    conn.close()
-    return dict(penalty) if penalty else None
 
 
 def get_pending_penalty_for_player_id(player_id):

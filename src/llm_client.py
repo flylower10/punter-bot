@@ -206,15 +206,6 @@ def generate(context, scenario=None, player_name=None):
         return ""
 
 
-def reset_persona():
-    """
-    Reset the LLM persona for a new week.
-
-    Currently a no-op — the butler character is stable across weeks.
-    Returns None so callers that check the return value handle it gracefully.
-    """
-    return None
-
 
 def get_framing(context, scenario=None, player_name=None):
     """

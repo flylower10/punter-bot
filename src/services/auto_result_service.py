@@ -15,7 +15,7 @@ from src.services.fixture_service import get_fixture_by_api_id, refresh_fixture
 from src.services.pick_service import get_matched_picks_for_week
 from src.services.result_service import record_result, get_consecutive_losses, all_results_in
 from src.services.week_service import complete_week
-from src.services.penalty_service import suggest_penalty
+from src.services.penalty_service import suggest_penalty, PENALTY_THRESHOLDS, PENALTY_AMOUNTS
 from src.services.stats_service import get_leaderboard
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue
 import src.butler as butler
@@ -98,12 +98,10 @@ def auto_result_week(week_id):
         )
 
         # Check for penalties
-        penalty_thresholds = {3: "streak_3", 5: "streak_5", 7: "streak_7", 10: "streak_10"}
-        penalty_amounts = {3: 0, 5: 50, 7: 100, 10: 200}
-        if streak in penalty_thresholds:
-            suggest_penalty(pick["player_id"], week_id, penalty_thresholds[streak])
+        if streak in PENALTY_THRESHOLDS:
+            suggest_penalty(pick["player_id"], week_id, PENALTY_THRESHOLDS[streak])
             announcement += "\n\n" + butler.penalty_suggested(
-                player, streak, penalty_thresholds[streak], penalty_amounts[streak]
+                player, streak, PENALTY_THRESHOLDS[streak], PENALTY_AMOUNTS[PENALTY_THRESHOLDS[streak]]
             )
 
         announcements.append(announcement)

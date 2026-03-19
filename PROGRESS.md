@@ -72,7 +72,7 @@
 - **All services running via PM2**: Bridge on :3000, Flask on :5001, health check
 - **WhatsApp connected**: Bot authenticated and live in main group (447762550958-1423072447@g.us)
 - **SSH access**: `ssh -i ~/Documents/Oracle/ssh-key-2026-02-18.key ubuntu@193.123.179.96`
-- **Tests**: 255 passing
+- **Tests**: 254 passing
 - **Phase 2 complete**: Structured data, API integration, auto-resulting, market prices
 - **Phase 3a implemented**: Live match events + smart auto-resulting (trial pending)
 - **Phase 4 complete**: Multi-sport support (12 sports detected, fixture/odds/auto-result wired up)
@@ -80,7 +80,7 @@
 - **Admin phones configured**: Ed (`353871527436@c.us`) as ADMIN_PHONE, all 6 player phones stored in DB
 - **LLM personality**: Butler persona live in main group (`LLM_ENABLED=true`)
 - **LLM architecture**: Framing-only — butler adds opening/closing lines around templates, never rewrites structured content. Template text passed to LLM to prevent repetition. Reminders use opening only (no closing).
-- **LLM functions**: `generate()`, `banter_reply()`, `reset_persona()` all implemented and working
+- **LLM functions**: `generate()`, `banter_reply()` implemented and working
 - **Group isolation**: `group_id` on weeks table — test and main groups have separate week/pick spaces
 - **API-Football**: Fixture caching, pick enrichment, smart auto-resulting (per-fixture on FT + Mon 10AM safety sweep)
 - **Multi-sport**: Sport detection on every pick, sport-aware matching/aliases/odds; non-football API keys not yet configured
@@ -170,7 +170,6 @@ pm2 restart all
 ### Step 0a: Fix Broken LLM Functions (2026-02-25)
 - [x] `llm_client.generate()` — re-implemented as plain-text LLM call (not JSON framing)
 - [x] `butler.banter_reply()` — implemented for Brian/bot mention banter
-- [x] `llm_client.reset_persona()` — implemented as no-op (returns None)
 - [x] `_shadow_message()` now works — calls working `generate()`
 
 ### Step 0b: Group Isolation (2026-02-25)
@@ -182,7 +181,7 @@ pm2 restart all
 - [x] Test and main groups now fully isolated in the database
 
 ### Step 1a: Schema Extensions (2026-02-25)
-- [x] 7 new columns on `picks`: sport, competition, event_name, market_type, api_fixture_id, market_price, confirmed_odds
+- [x] 3 new columns on `picks`: sport, api_fixture_id, market_price, confirmed_odds (competition, event_name, market_type, is_late removed in codebase cleanup)
 - [x] New `fixtures` table (api_id, sport, competition, teams, kickoff, scores, status)
 - [x] New `team_aliases` table (alias → canonical_name, COLLATE NOCASE)
 - [x] 50+ team aliases seeded (Premier League, European clubs, Scottish)
@@ -374,6 +373,14 @@ pm2 restart all
 - [x] Single API key: `API_FOOTBALL_KEY` shared across all api-sports.io products
 - [x] Pick count in LLM context: `picks_so_far` passed to `pick_confirmed()` so LLM knows pick number
 
+## Codebase Cleanup [COMPLETE — 2026-03-19]
+
+- [x] Removed 5 dead functions: `_picks_kicker()`, `reset_persona()`, `week_has_loss()` (now restored — was used), `get_pending_penalty_for_player()` (nickname version), `lookup_player_by_emoji()`
+- [x] Dropped 4 unused `picks` columns: `is_late`, `competition`, `event_name`, `market_type` — set during enrichment, never read back; DB migration drops them on next deploy
+- [x] Consolidated penalty threshold maps into `PENALTY_THRESHOLDS` / `PENALTY_AMOUNTS` constants in `penalty_service.py` (was copy-pasted in `app.py` and `auto_result_service.py`)
+- [x] Consolidated `get_upcoming_fixtures()` from 4 near-identical SQL branches into 1 parameterized query
+- [x] Net: −76 lines across 13 files, 254 tests passing
+
 ## Phase 3b: Enhancements [PLANNED]
 
 ### Bet Slip Reader
@@ -390,4 +397,4 @@ pm2 restart all
 ---
 
 **Last Updated:** 2026-03-19
-**Status:** ✅ Phase 5 Complete — Rotation logic fully correct; 255 tests passing
+**Status:** ✅ Phase 5 Complete — Rotation logic fully correct; 254 tests passing; codebase cleanup done

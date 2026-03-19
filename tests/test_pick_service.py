@@ -153,7 +153,6 @@ class TestCrossSportFallback:
 
         assert pick["sport"] == "rugby"
         assert pick["api_fixture_id"] == 99999
-        assert pick["event_name"] == "Ireland vs Italy"
 
     def test_no_fallback_when_football_matches(self):
         """When a football fixture matches, no cross-sport fallback needed."""
