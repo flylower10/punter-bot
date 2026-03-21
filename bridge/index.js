@@ -209,6 +209,9 @@ function postToFlask(path, data) {
 // Track messages sent by the bot to avoid processing them as input
 const botSentMessages = new Set();
 
+// Cache recent media messages so Flask can pull images on demand
+const recentMessages = new Map(); // message_id → message object
+
 // Forward incoming group messages to Flask backend
 // Use message_create to capture all messages including your own
 client.on("message_create", async (message) => {
@@ -261,6 +264,14 @@ client.on("message_create", async (message) => {
 
     console.log(`[${chat.name}] ${sender}: ${(message.body || "").slice(0, 80)}`);
 
+    // Cache media messages so Flask can pull images on demand via /media
+    if (message.hasMedia) {
+      recentMessages.set(payload.message_id, message);
+      if (recentMessages.size > 50) {
+        recentMessages.delete(recentMessages.keys().next().value);
+      }
+    }
+
     const result = await postToFlask("/webhook", payload);
     if (result && result.action === "replied") {
       console.log(`Bot replied: ${result.reply.slice(0, 80)}`);
@@ -303,6 +314,20 @@ app.post("/send", async (req, res) => {
       return;
     }
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/media", async (req, res) => {
+  const { message_id } = req.body;
+  if (!message_id) return res.status(400).json({ error: "message_id required" });
+  const msg = recentMessages.get(message_id);
+  if (!msg) return res.status(404).json({ error: "message not found or expired" });
+  try {
+    const media = await msg.downloadMedia();
+    if (!media) return res.status(404).json({ error: "no media" });
+    res.json({ data: media.data, mimetype: media.mimetype });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

@@ -273,3 +273,52 @@ def get_framing(context, scenario=None, player_name=None):
     except Exception as e:
         logger.warning("Groq API error: %s", e)
         return _EMPTY_FRAMING
+
+
+_BETSLIP_PROMPT = """You are reading a bookmaker bet slip image.
+Extract ALL available data and return as JSON with this structure:
+{
+  "stake": <number or null>,
+  "total_odds": <decimal number or null>,
+  "potential_return": <number or null>,
+  "legs": [
+    {"selection": "<team or player or selection text>", "odds": <decimal or null>},
+    ...
+  ]
+}
+Convert fractional odds to decimal (e.g. 4/5 -> 1.8, evens -> 2.0).
+Return null for any field you cannot clearly read.
+Include every leg/selection you can see on the slip."""
+
+
+def read_bet_slip(image_b64, mime="image/jpeg"):
+    """Extract bet slip data from a base64-encoded image using Groq vision."""
+    if not Config.GROQ_API_KEY:
+        return None
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {Config.GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+                        {"type": "text", "text": _BETSLIP_PROMPT},
+                    ],
+                }],
+                "response_format": {"type": "json_object"},
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except Exception:
+        logger.exception("Groq vision extraction failed")
+        return None

@@ -71,6 +71,7 @@ def webhook():
     body = data.get("body", "")
     group_id = data.get("group_id", "")
     has_media = data.get("has_media", False)
+    message_id = data.get("message_id", "")
 
     # Store group_id on Flask g for request-scoped access by handlers
     g.group_id = group_id
@@ -121,7 +122,7 @@ def webhook():
 
     # Screenshot from the designated placer = bet placed (all picks in)
     if not reply and has_media:
-        reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
+        reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id)
 
     # Banter: disabled in main group for now — shadow mode only
     # if not reply and body.strip() and Config.LLM_ENABLED:
@@ -336,7 +337,7 @@ def _looks_like_bet_placed(text):
     return any(kw in t for kw in keywords)
 
 
-def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
+def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id=""):
     """
     When all picks are in, if the designated placer posts a screenshot or
     confirmation text, record the bet as placed.
@@ -371,6 +372,10 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body=""):
         return None
 
     advance_rotation(week["id"], next_placer["id"])
+    if message_id:
+        from src.services.bet_slip_service import process_bet_slip
+        picks = get_picks_for_week(week["id"])
+        process_bet_slip(week["id"], next_placer["id"], message_id, picks)
     return butler.bet_slip_received(next_placer)
 
 
