@@ -7,6 +7,38 @@ from src.services.player_service import get_all_players
 logger = logging.getLogger(__name__)
 
 
+def _send_fixture_match_alert(description, enrichment):
+    """Send a Telegram alert when a pick is matched to a fixture."""
+    try:
+        from src.alerts import send_alert
+        event = enrichment.get("event_name", "?")
+        competition = enrichment.get("competition", "")
+        kickoff = enrichment.get("kickoff", "")
+        price = enrichment.get("market_price")
+
+        # Format kickoff as "Sat 22 Mar 12:00" if present
+        kickoff_str = ""
+        if kickoff:
+            try:
+                from datetime import datetime as dt
+                ko = dt.fromisoformat(kickoff.replace("Z", "+00:00"))
+                kickoff_str = f"\nKickoff: {ko.strftime('%a %d %b %H:%M')} UTC"
+            except Exception:
+                kickoff_str = f"\nKickoff: {kickoff}"
+
+        price_str = f"\nMarket price: {price:.2f}" if price else ""
+        comp_str = f" ({competition})" if competition else ""
+
+        send_alert(
+            f"🔗 Pick matched to fixture\n"
+            f"Pick: {description}\n"
+            f"Match: {event}{comp_str}"
+            f"{kickoff_str}{price_str}"
+        )
+    except Exception as e:
+        logger.warning("Fixture match alert failed (non-blocking): %s", e)
+
+
 def submit_pick(player_id, week_id, description, odds_decimal, odds_original, bet_type, sport=None):
     """
     Store a pick for a player in a given week.
@@ -129,6 +161,7 @@ def _try_enrich(description, bet_type, sport="football", include_started=False):
                         logger.info("Market price: %s @ %.2f", teams[0], price)
             except Exception as e:
                 logger.warning("Market price lookup failed (non-blocking): %s", e)
+            _send_fixture_match_alert(description, result)
             return result
     except Exception as e:
         logger.warning("Enrichment failed (non-blocking): %s", e)

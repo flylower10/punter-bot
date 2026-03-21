@@ -197,4 +197,5 @@ def _fixture_to_enrichment(fixture):
         "event_name": f"{fixture['home_team']} vs {fixture['away_team']}",
         "market_type": "win",
         "api_fixture_id": fixture.get("api_id"),
+        "kickoff": fixture.get("kickoff", ""),
     }

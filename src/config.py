@@ -34,6 +34,11 @@ class Config:
     # Where match events are posted (shadow group for trial, main group when live)
     MATCH_MONITOR_GROUP_ID = os.getenv("MATCH_MONITOR_GROUP_ID", "")
 
+    # Telegram alerts (uses same bot as health_check.py)
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    # Separate alerts channel — defaults to health-check chat if not set
+    ALERTS_CHAT_ID = os.getenv("ALERTS_CHAT_ID", os.getenv("TELEGRAM_CHAT_ID", ""))
+
     # API-Sports key (shared across all sports — 100 req/day per sport)
     API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
     # The Odds API (free tier: 500 req/month)
