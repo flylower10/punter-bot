@@ -134,29 +134,17 @@ def picks_status(submitted, missing):
     return f"Awaiting selection from:\n{missing_lines}"
 
 
-def all_picks_in(placer, picks=None):
-    """Announce all picks are in, who places the bet, and list all selections.
+def _picks_grouped_lines(picks):
+    """Build display lines for picks ordered by kickoff time.
 
-    When picks include kickoff data (from get_picks_for_week_by_kickoff), orders
-    by kickoff time with day headers and fixture names. Unmatched picks appear
-    under 'Kickoff TBC'.
+    Groups by day and time with fixture names as headers. Unmatched picks appear
+    under 'Kickoff TBC'. Result suffixes (✅/❌/Void) are appended when present.
+    Returns a list of strings.
     """
-    header = (
-        f"All selections have been received.  "
-        f"{placer['formal_name']}, you are next in the rotation to place the wager."
-    )
-    if not picks:
-        return header
-
     tz = pytz.timezone("Europe/Dublin")
-
-    matched = []
-    unmatched = []
+    matched, unmatched = [], []
     for pick in picks:
-        if pick.get("kickoff"):
-            matched.append(pick)
-        else:
-            unmatched.append(pick)
+        (matched if pick.get("kickoff") else unmatched).append(pick)
 
     # Group matched picks by (day, time) for bundled display
     groups = []  # list of (day_name, time_str, [(fixture, pick), ...])
@@ -177,36 +165,56 @@ def all_picks_in(placer, picks=None):
         time_str = dt_local.strftime("%-I:%M %p")
         fixture = f"{pick.get('home_team', '?')} vs {pick.get('away_team', '?')}"
 
-        # Append to last group if same day+time, otherwise start new group
         if groups and groups[-1][0] == day_name and groups[-1][1] == time_str:
             groups[-1][2].append((fixture, pick))
         else:
             groups.append((day_name, time_str, [(fixture, pick)]))
+
+    result_suffix_map = {"win": " \u2705", "loss": " \u274c", "void": " Void"}
 
     lines = []
     current_day = None
     for day_name, time_str, fixture_picks in groups:
         if day_name != current_day:
             if lines:
-                lines.append("")  # blank line before new day
+                lines.append("")
             current_day = day_name
             lines.append(day_name)
         elif lines:
-            lines.append("")  # blank line between time groups on same day
+            lines.append("")
 
         lines.append(f"\u23f0 {time_str}")
         for fixture, pick in fixture_picks:
-            lines.append(f"{fixture}")
-            lines.append(_format_pick_line(pick))
+            lines.append(fixture)
+            suffix = result_suffix_map.get(pick.get("result_outcome"), "")
+            lines.append(_format_pick_line(pick) + suffix)
 
     if unmatched:
         if lines:
             lines.append("")
         lines.append("Kickoff TBC")
         for pick in unmatched:
-            lines.append(_format_pick_line(pick))
+            suffix = result_suffix_map.get(pick.get("result_outcome"), "")
+            lines.append(_format_pick_line(pick) + suffix)
 
-    return header + "\n\n" + "\n".join(lines)
+    return lines
+
+
+def all_picks_in(placer, picks=None):
+    """Announce all picks are in, who places the bet, and list all selections.
+
+    When picks include kickoff data (from get_picks_for_week_by_kickoff), orders
+    by kickoff time with day headers and fixture names. Unmatched picks appear
+    under 'Kickoff TBC'.
+    """
+    header = (
+        f"All selections have been received.  "
+        f"{placer['formal_name']}, you are next in the rotation to place the wager."
+    )
+    if not picks:
+        return header
+
+    return header + "\n\n" + "\n".join(_picks_grouped_lines(picks))
 
 
 def _format_pick_line(pick):
@@ -432,34 +440,38 @@ def vault_display(total):
 
 
 def picks_display(picks, week_number=None):
-    """Format current week's picks for display. Shows result (✅/❌) when available."""
+    """Format current week's picks for display. Shows result (✅/❌) when available.
+
+    When picks include kickoff data (from get_picks_for_week_by_kickoff), uses the
+    same day/time/fixture grouped format as the all_picks_in announcement.
+    """
     if not picks:
         return "No picks recorded for this week yet."
     lines = ["\U0001f4dc RECORDED PICKS", "\u2501" * 22]
     if week_number:
         lines.append(f"Week {week_number}")
         lines.append("")
-    pick_summaries = []
-    for p in picks:
-        odds = p["odds_original"] if p["odds_original"] != "placer" else "(placer to confirm)"
-        formal = _formalize_pick(p["description"])
-        display_text = _strip_odds_for_display(formal) if p["odds_original"] != "placer" else formal
-        result_suffix = ""
-        outcome = p.get("result_outcome")
-        if outcome == "win":
-            result_suffix = " \u2705"
-        elif outcome == "loss":
-            result_suffix = " \u274c"
-        elif outcome == "void":
-            result_suffix = " Void"
-        emoji = _primary_emoji(p.get("emoji", ""))
-        prefix = f"{emoji} " if emoji else ""
-        lines.append(f"{prefix}{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
-        pick_summaries.append(f"{p['formal_name']}: {display_text} @ {odds}")
 
-    body = "\n".join(lines)
+    if any("kickoff" in p for p in picks):
+        lines += _picks_grouped_lines(picks)
+    else:
+        for p in picks:
+            odds = p["odds_original"] if p["odds_original"] != "placer" else "(placer to confirm)"
+            formal = _formalize_pick(p["description"])
+            display_text = _strip_odds_for_display(formal) if p["odds_original"] != "placer" else formal
+            result_suffix = ""
+            outcome = p.get("result_outcome")
+            if outcome == "win":
+                result_suffix = " \u2705"
+            elif outcome == "loss":
+                result_suffix = " \u274c"
+            elif outcome == "void":
+                result_suffix = " Void"
+            emoji = _primary_emoji(p.get("emoji", ""))
+            prefix = f"{emoji} " if emoji else ""
+            lines.append(f"{prefix}{p['formal_name']}: {display_text} @ {odds}{result_suffix}")
 
-    return body
+    return "\n".join(lines)
 
 
 def banter_reply(sender, body, player=None):

@@ -217,7 +217,10 @@ def _cmd_picks():
     week = get_current_week(group_id=_get_group_id())
     if not week:
         return "I have no active week at present. The season will commence when picks are collected, Thursday through Friday."
-    picks = get_picks_for_week(week["id"])
+    if all_picks_in(week["id"]):
+        picks = get_picks_for_week_by_kickoff(week["id"])
+    else:
+        picks = get_picks_for_week(week["id"])
     return butler.picks_display(picks, week["week_number"])
 
 
