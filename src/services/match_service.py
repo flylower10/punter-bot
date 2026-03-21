@@ -96,7 +96,9 @@ def _extract_team_names(description):
     # Remove bet type keywords
     text = re.sub(
         r"\b(btts|over|under|ht[/_]?ft|handicap|to\s+win|to\s+beat|"
-        r"both\s+teams\s+to\s+score|draw|no\s+draw)\b",
+        r"both\s+teams\s+to\s+score|draw|no\s+draw|"
+        r"cards?|bookings?|corners?|shots?|clean\s+sheet|anytime|scorer?|"
+        r"fouls?|offsides?|throw[\s-]ins?)\b",
         " ", text, flags=re.IGNORECASE,
     )
 
