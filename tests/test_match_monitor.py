@@ -535,3 +535,102 @@ class TestAccaLossSuppression:
 
         # Auto-result announcement should still be posted
         assert len(messages) >= 1, "Expected at least one auto-result announcement"
+
+
+# --- Tests: incremental score per goal ---
+
+class TestGoalScoreAtMoment:
+    def test_multiple_goals_show_incremental_scores(self, monkeypatch):
+        """Each goal should show the score at that moment, not the final score."""
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_ENABLED", True)
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_GROUP_ID", "test-group")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "main-group")
+
+        week, player, pick = _setup_pick_with_fixture(
+            api_id=70001, fixture_status="2H",
+            home="Bournemouth", away="Manchester United",
+            description="Bournemouth to win",
+        )
+
+        # Three goals scored between polls — all would show 1-2 (final) without the fix
+        events = [
+            {"type": "Goal", "detail": "Penalty", "time": {"elapsed": 61},
+             "team": {"name": "Manchester United"}, "player": {"name": "B. Fernandes"}},
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 67},
+             "team": {"name": "Bournemouth"}, "player": {"name": "R. Christie"}},
+            {"type": "Goal", "detail": "Normal Goal", "time": {"elapsed": 71},
+             "team": {"name": "Manchester United"}, "player": {"name": "H. Maguire"}},
+        ]
+        fixture_data = _make_fixture_data(
+            api_id=70001, status="2H", home="Bournemouth", away="Manchester United",
+            home_score=1, away_score=2, events=events,
+        )
+        conn = get_db()
+        conn.execute(
+            "UPDATE fixtures SET home_score = 1, away_score = 2, status = '2H', "
+            "raw_json = ? WHERE api_id = 70001",
+            (json.dumps(fixture_data),),
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
+        )
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
+        )
+
+        messages = []
+        poll_fixtures([70001], week["id"], lambda chat_id, text: messages.append(text))
+
+        goal_msgs = [m for m in messages if any(n in m for n in ("Fernandes", "Christie", "Maguire"))]
+        assert len(goal_msgs) == 3
+        # Each goal shows the score at that moment, not the final 1-2
+        assert "Bournemouth 0-1 Manchester United" in goal_msgs[0]   # Fernandes penalty
+        assert "Bournemouth 1-1 Manchester United" in goal_msgs[1]   # Christie equaliser
+        assert "Bournemouth 1-2 Manchester United" in goal_msgs[2]   # Maguire winner
+
+    def test_own_goal_credits_correct_team(self, monkeypatch):
+        """Own goal by home team should increment the away score."""
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_ENABLED", True)
+        monkeypatch.setattr("src.config.Config.MATCH_MONITOR_GROUP_ID", "test-group")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "main-group")
+
+        week, player, pick = _setup_pick_with_fixture(
+            api_id=70002, fixture_status="2H",
+            home="Liverpool", away="Arsenal",
+            description="Liverpool to win",
+        )
+
+        events = [
+            {"type": "Goal", "detail": "Own Goal", "time": {"elapsed": 55},
+             "team": {"name": "Liverpool"}, "player": {"name": "Van Dijk"}},
+        ]
+        fixture_data = _make_fixture_data(
+            api_id=70002, status="2H", home="Liverpool", away="Arsenal",
+            home_score=0, away_score=1, events=events,
+        )
+        conn = get_db()
+        conn.execute(
+            "UPDATE fixtures SET home_score = 0, away_score = 1, status = '2H', "
+            "raw_json = ? WHERE api_id = 70002",
+            (json.dumps(fixture_data),),
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixture", lambda x, **kw: None
+        )
+        monkeypatch.setattr(
+            "src.services.match_monitor_service.refresh_fixtures_by_date", lambda x: 0
+        )
+
+        messages = []
+        poll_fixtures([70002], week["id"], lambda chat_id, text: messages.append(text))
+
+        own_goal_msgs = [m for m in messages if "Van Dijk" in m]
+        assert len(own_goal_msgs) == 1
+        # Liverpool OG → away (Arsenal) scores: Liverpool 0-1 Arsenal
+        assert "Liverpool 0-1 Arsenal" in own_goal_msgs[0]

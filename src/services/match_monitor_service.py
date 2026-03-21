@@ -162,14 +162,28 @@ def _post_new_events(fixture, send_fn, target_group):
 
     events = extract_events(data)
     api_id = fixture["api_id"]
+    home_team = fixture.get("home_team", "")
+
+    # Track running score in event order (API-Football returns events chronologically).
+    # This ensures each goal is posted with the score at that moment, not the final score.
+    running_home = 0
+    running_away = 0
 
     for ev in events:
+        if ev["event_type"] == "Goal":
+            # Own Goal: the credited team is the one that conceded, so invert.
+            is_own_goal = ev.get("detail") == "Own Goal"
+            home_scored = (ev.get("team") == home_team) != is_own_goal
+            if home_scored:
+                running_home += 1
+            else:
+                running_away += 1
+
         if _record_event_if_new(api_id, ev["event_key"], ev["event_type"], ev.get("detail")):
-            # Build and send event message
             msg = butler.match_event(
                 ev["event_type"],
                 fixture["home_team"], fixture["away_team"],
-                fixture.get("home_score", 0), fixture.get("away_score", 0),
+                running_home, running_away,
                 ev["player"], ev["minute"],
                 detail=ev.get("detail"),
             )
