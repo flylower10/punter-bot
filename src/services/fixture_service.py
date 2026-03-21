@@ -425,28 +425,3 @@ def extract_events(raw_json):
 
     return results
 
-
-def get_fixture_list_for_matching():
-    """
-    Build a concise fixture list string for LLM matching.
-    Used as context when the LLM tries to match a pick to a fixture.
-
-    Returns:
-        str — formatted list like "1. Arsenal vs Chelsea (EPL, Sat 3pm)\n2. ..."
-    """
-    fixtures = get_upcoming_fixtures()
-    if not fixtures:
-        return ""
-
-    lines = []
-    for i, f in enumerate(fixtures, 1):
-        try:
-            kickoff = datetime.fromisoformat(f["kickoff"])
-            time_str = kickoff.strftime("%a %H:%M")
-        except (ValueError, TypeError):
-            time_str = "TBD"
-        lines.append(
-            f"{i}. {f['home_team']} vs {f['away_team']} "
-            f"({f['competition']}, {time_str}) [id:{f['api_id']}]"
-        )
-    return "\n".join(lines)

@@ -1,10 +1,9 @@
 """
 Pick-to-fixture matching service.
 
-Three-tier matching approach:
+Two-tier matching approach:
   1. Exact alias match — look up team name in team_aliases table
   2. Fuzzy string match — difflib against cached fixture team names
-  3. LLM fallback — send pick text + fixture list to Groq, ask it to match
 
 Enrichment is best-effort. If matching fails, the pick is stored without
 enrichment. Never blocks pick submission.
@@ -15,7 +14,7 @@ import re
 from difflib import SequenceMatcher
 
 from src.db import get_db
-from src.services.fixture_service import get_upcoming_fixtures, get_fixture_list_for_matching
+from src.services.fixture_service import get_upcoming_fixtures
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +68,6 @@ def match_pick(description, bet_type="win", sport="football", include_started=Fa
     if result:
         logger.info("Tier 2 fuzzy match: %s → %s", description[:50], result["event_name"])
         result["market_type"] = bet_type
-        return result
-
-    # Tier 3: LLM fallback
-    result = _match_by_llm(description, bet_type, sport=sport)
-    if result:
-        logger.info("Tier 3 LLM match: %s → %s", description[:50], result["event_name"])
         return result
 
     logger.info("No match found for: %s", description[:50])
@@ -192,77 +185,6 @@ def _match_by_fuzzy(team_names, fixtures, sport="football"):
         return _fixture_to_enrichment(best_fixture)
 
     return None
-
-
-def _match_by_llm(description, bet_type, sport="football"):
-    """
-    Tier 3: Send pick text + fixture list to the LLM and ask it to match.
-
-    Uses Groq (cheap, ~120 tokens). Returns enrichment dict or None.
-    """
-    from src.config import Config
-    if not Config.LLM_ENABLED or not Config.GROQ_API_KEY:
-        return None
-
-    fixture_list = get_fixture_list_for_matching()
-    if not fixture_list:
-        return None
-
-    import json
-    import requests
-
-    prompt = (
-        f'A punter submitted this {sport} pick: "{description}"\n\n'
-        f"Here are this weekend's fixtures:\n{fixture_list}\n\n"
-        f"Which fixture does this pick refer to? Reply with ONLY a JSON object:\n"
-        f'{{"fixture_id": <number or null>, "reason": "<brief explanation>"}}\n'
-        f"If no fixture matches, set fixture_id to null."
-    )
-
-    try:
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {Config.GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": f"You match betting picks to {sport} fixtures. Reply with JSON only."},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 80,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=5,
-        )
-
-        if resp.status_code != 200:
-            logger.warning("LLM match returned %d", resp.status_code)
-            return None
-
-        content = resp.json()["choices"][0]["message"]["content"].strip()
-        data = json.loads(content)
-        fixture_id = data.get("fixture_id")
-
-        if not fixture_id:
-            return None
-
-        # Look up the fixture in our cache
-        from src.services.fixture_service import get_fixture_by_api_id
-        fixture = get_fixture_by_api_id(fixture_id, sport=sport)
-        if fixture:
-            result = _fixture_to_enrichment(fixture)
-            result["market_type"] = bet_type
-            return result
-
-        return None
-
-    except Exception as e:
-        logger.warning("LLM match failed: %s", e)
-        return None
 
 
 def _fixture_to_enrichment(fixture):

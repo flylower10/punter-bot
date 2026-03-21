@@ -121,8 +121,8 @@ def pick_confirmed(player, description, odds, is_update=False, placer=None, prev
 
     scenario = "pick_confirmed_first" if first_of_week and not is_update else "pick_confirmed"
     context = f"{player['formal_name']}'s pick recorded: {_strip_odds_for_display(formal)} @ {odds}."
-    if picks_so_far and picks_so_far > 1:
-        context += f" Pick {picks_so_far} this week."
+    if picks_so_far is not None and picks_so_far > 1:
+        context += f" Pick {picks_so_far} this week — not the first pick."
     return _frame(template, context, scenario=scenario, player_name=_first_name(player))
 
 
