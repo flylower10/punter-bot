@@ -381,20 +381,46 @@ pm2 restart all
 - [x] Consolidated `get_upcoming_fixtures()` from 4 near-identical SQL branches into 1 parameterized query
 - [x] Net: −76 lines across 13 files, 254 tests passing
 
-## Phase 3b: Enhancements [PLANNED]
+## Phase 3b: Bet Slip Reader [COMPLETE — 2026-03-21]
 
 ### Bet Slip Reader
-- [ ] Bridge downloads image via `message.downloadMedia()`
-- [ ] Groq Vision extracts picks, odds, stake, return from bet slip screenshot
-- [ ] Populates `confirmed_odds` on matched picks
-- [ ] Stores image + aggregate data in `bet_slips` table
+- [x] Bridge caches recent media messages in `recentMessages` Map (cap 50, FIFO eviction)
+- [x] New `POST /media` endpoint on bridge — Flask pulls image on demand after validating placer
+- [x] `llm_client.read_bet_slip()` — Groq vision (`meta-llama/llama-4-scout-17b-16e-instruct`) extracts stake, total_odds, potential_return, per-leg odds
+- [x] `src/services/bet_slip_service.py` — fetch, extract, match legs → picks (difflib ≥0.6), persist; best-effort, never raises
+- [x] `app.py` threads `message_id`, calls `process_bet_slip()` after `advance_rotation()`
+- [x] 16 new tests (272 total)
+- [x] Historical backfill: `scripts/backfill_betslip.py` (generic) + per-week scripts weeks 1–5
+- [x] Weeks 1–5 backfilled: 5 bet_slips rows, 30 picks with confirmed_odds
 
-### Other
+### Remaining
 - [ ] **Match start validation** — warn on picks for matches already kicked off
+
+## Roadmap: Outstanding Items
+
+### Match Monitor Trial (Phase 3a → Main Group)
+- [ ] Enable `MATCH_MONITOR_ENABLED=true` on server
+- [ ] Set `MATCH_MONITOR_GROUP_ID=<shadow_group>` for trial weekend
+- [ ] Validate: events posting within 10 min, no duplicates, API budget < 100 req/day Saturday
+- [ ] Switch `MATCH_MONITOR_GROUP_ID` to main group after successful trial
+
+### Match Start Validation (Phase 3b remainder)
+- [ ] Warn when a pick is submitted for a match that has already kicked off
+
+### Multi-Sport API Keys (Phase 4)
+- [ ] Configure rugby API key on server (Six Nations already in play)
+- [ ] MMA/UFC fighter-specific auto-resulting (fighter A beat fighter B, not team scores)
+
+### GAA
+- [ ] Fixture API (RTÉ scraping — see `gaa-data-sources.md`)
+- [ ] Odds (Betfair Exchange API)
+
+### Low Priority / Future
 - [ ] Historical analytics / Punter Wrapped
-- [ ] Web dashboard (low priority)
+- [ ] Web dashboard
+- [ ] Test remote restart via OCI console
 
 ---
 
-**Last Updated:** 2026-03-19
-**Status:** ✅ Phase 5 Complete — Rotation logic fully correct; 254 tests passing; codebase cleanup done
+**Last Updated:** 2026-03-21
+**Status:** ✅ Phase 3b Complete — Bet slip reader live; 272 tests passing; weeks 1–5 backfilled
