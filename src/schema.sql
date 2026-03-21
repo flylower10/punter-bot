@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS penalties (
     amount REAL NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'suggested' CHECK (status IN ('suggested', 'confirmed', 'paid')),
     confirmed_by TEXT,
-    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
