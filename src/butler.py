@@ -632,7 +632,7 @@ def punter_report_display(period_data):
     from src.services.report_service import (
         compute_leaderboard, compute_acca_record, compute_group_pnl,
         compute_singles_pnl, compute_biggest_winner, compute_awards,
-        compute_sole_losers,
+        compute_sole_losers, compute_what_could_have_been,
     )
 
     start_week = period_data["start_week"]
@@ -682,6 +682,18 @@ def punter_report_display(period_data):
             lines.append(
                 f"\u26a0\ufe0f  Cashout cost: \u2212\u20ac{pnl['cashout_cost']:.0f}"
                 f" (left on the table vs full acca)"
+            )
+        lines.append("")
+
+    # --- What Could Have Been ---
+    what_could = compute_what_could_have_been(player_rows, bet_slips)
+    if what_could:
+        lines.append("\U0001f494 *What Could Have Been*")
+        lines.append("")
+        for entry in what_could:
+            lines.append(
+                f"Week {entry['week_number']} \u2014 {entry['formal_name']}'s pick let us down. "
+                f"Acca would have paid \u20ac{entry['potential_return']:.0f}."
             )
         lines.append("")
 

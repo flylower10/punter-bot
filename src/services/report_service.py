@@ -243,6 +243,33 @@ def compute_group_pnl(bet_slips, player_rows):
     return {"staked": staked, "returned": returned, "net": returned - staked, "cashout_cost": cashout_cost}
 
 
+def compute_what_could_have_been(player_rows, bet_slips):
+    """
+    For weeks with exactly one loser, return the acca payout that was missed.
+
+    Returns list of {player_id, formal_name, week_number, potential_return},
+    sorted by week, only for sole-loser weeks that have a bet slip with a
+    potential_return value.
+    """
+    sole_losers = compute_sole_losers(player_rows)
+    if not sole_losers:
+        return []
+
+    slip_by_week = {bs["week_number"]: bs for bs in bet_slips}
+
+    result = []
+    for sl in sole_losers:
+        bs = slip_by_week.get(sl["week_number"])
+        if bs and bs.get("potential_return"):
+            result.append({
+                "player_id": sl["player_id"],
+                "formal_name": sl["formal_name"],
+                "week_number": sl["week_number"],
+                "potential_return": float(bs["potential_return"]),
+            })
+    return result
+
+
 def compute_singles_pnl(player_rows, bet_slips, default_stake=20.0):
     """
     Hypothetical P&L per player if each pick were a standalone single at default_stake.

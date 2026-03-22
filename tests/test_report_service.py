@@ -10,6 +10,7 @@ from src.services.report_service import (
     compute_singles_pnl,
     compute_biggest_winner,
     compute_awards,
+    compute_what_could_have_been,
     get_period_data,
 )
 import src.butler as butler
@@ -252,6 +253,54 @@ class TestComputeSinglesPnl:
         assert result[1]["pnl"] == pytest.approx(40.0)
         # Dermot: -20
         assert result[2]["pnl"] == pytest.approx(-20.0)
+
+
+# ---------------------------------------------------------------------------
+# compute_what_could_have_been
+# ---------------------------------------------------------------------------
+
+class TestComputeWhatCouldHaveBeen:
+    def test_sole_loser_with_slip(self):
+        rows = _make_rows(
+            (1, "Kevin", 1, "loss", 2.0),
+            (2, "Dermot", 1, "win", 3.0),
+        )
+        slips = _make_slips((1, 10, 1231))
+        result = compute_what_could_have_been(rows, slips)
+        assert len(result) == 1
+        assert result[0]["formal_name"] == "Kevin"
+        assert result[0]["week_number"] == 1
+        assert result[0]["potential_return"] == pytest.approx(1231)
+
+    def test_multiple_losers_excluded(self):
+        rows = _make_rows(
+            (1, "Kevin", 1, "loss", 2.0),
+            (2, "Dermot", 1, "loss", 3.0),
+        )
+        slips = _make_slips((1, 10, 500))
+        result = compute_what_could_have_been(rows, slips)
+        assert result == []
+
+    def test_no_slip_excluded(self):
+        rows = _make_rows(
+            (1, "Kevin", 1, "loss", 2.0),
+            (2, "Dermot", 1, "win", 3.0),
+        )
+        result = compute_what_could_have_been(rows, [])
+        assert result == []
+
+    def test_multiple_sole_loser_weeks(self):
+        rows = _make_rows(
+            (1, "Kevin", 1, "loss", 2.0),
+            (2, "Dermot", 1, "win", 3.0),
+            (1, "Kevin", 2, "win", 2.0),
+            (2, "Dermot", 2, "loss", 3.0),
+        )
+        slips = _make_slips((1, 10, 500), (2, 10, 800))
+        result = compute_what_could_have_been(rows, slips)
+        assert len(result) == 2
+        assert result[0]["week_number"] == 1
+        assert result[1]["week_number"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -525,3 +574,30 @@ class TestPunterReportDisplay:
         data["bet_slips"] = _make_slips((1, 10, 30), (2, 10, 0))
         text = butler.punter_report_display(data)
         assert "Cashout cost" not in text
+
+    def test_what_could_have_been_shown_for_sole_loser(self):
+        # Week 1: sole loser (only Mr Kevin loses); week 2: both lose
+        data = self._minimal_data()
+        data["player_rows"] = _make_rows(
+            (1, "Mr Kevin", 1, "loss", 2.0),
+            (2, "Mr Dermot", 1, "win", 3.0),
+            (1, "Mr Kevin", 2, "loss", 2.0),
+            (2, "Mr Dermot", 2, "loss", 3.0),
+        )
+        data["bet_slips"] = _make_slips((1, 10, 500), (2, 10, 300))
+        text = butler.punter_report_display(data)
+        assert "What Could Have Been" in text
+        assert "Mr Kevin" in text
+        assert "500" in text
+        # Week 2 (multiple losers) should not appear
+        assert "300" not in text
+
+    def test_what_could_have_been_hidden_when_no_sole_losers(self):
+        data = self._minimal_data()
+        # Both players lose week 1 — no sole loser
+        data["player_rows"] = _make_rows(
+            (1, "Mr Kevin", 1, "loss", 2.0),
+            (2, "Mr Dermot", 1, "loss", 3.0),
+        )
+        text = butler.punter_report_display(data)
+        assert "What Could Have Been" not in text
