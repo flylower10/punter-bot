@@ -587,6 +587,7 @@ class TestPunterReportDisplay:
         data["bet_slips"] = _make_slips((1, 10, 500), (2, 10, 300))
         text = butler.punter_report_display(data)
         assert "What Could Have Been" in text
+        assert "so close" in text
         assert "Mr Kevin" in text
         assert "500" in text
         # Week 2 (multiple losers) should not appear

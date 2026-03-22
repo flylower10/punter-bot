@@ -692,8 +692,8 @@ def punter_report_display(period_data):
         lines.append("")
         for entry in what_could:
             lines.append(
-                f"Week {entry['week_number']} \u2014 {entry['formal_name']}'s pick let us down. "
-                f"Acca would have paid \u20ac{entry['potential_return']:.0f}."
+                f"Week {entry['week_number']} \u2014 so close. {entry['formal_name']}'s pick didn't come in "
+                f"\u2014 acca would have paid \u20ac{entry['potential_return']:.0f}."
             )
         lines.append("")
 
