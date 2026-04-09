@@ -67,13 +67,21 @@ def notify_telegram(message: str) -> None:
         logger.warning("Telegram notification failed: %s", e)
 
 
-def check_endpoint(url: str, name: str) -> bool:
-    """Ping a /health endpoint. Return True if OK."""
+def check_endpoint(url: str, name: str, require_whatsapp: bool = False) -> bool:
+    """Ping a /health endpoint. Return True if OK.
+
+    If require_whatsapp=True, also checks that whatsapp=="connected" in the
+    response body (used for the bridge, which always returns status=ok even
+    when the WhatsApp client is disconnected or crash-looping).
+    """
     try:
         resp = requests.get(url, timeout=TIMEOUT_SECONDS)
         if resp.status_code == 200:
             data = resp.json()
             if data.get("status") == "ok":
+                if require_whatsapp and data.get("whatsapp") != "connected":
+                    logger.warning("%s health check: WhatsApp disconnected (state=%s)", name, data.get("whatsapp"))
+                    return False
                 return True
         logger.warning("%s health check failed: status=%d body=%s", name, resp.status_code, resp.text[:200])
         return False
@@ -95,7 +103,7 @@ def main() -> None:
 
     while True:
         flask_ok = check_endpoint(f"{FLASK_URL}/health", "Flask")
-        bridge_ok = check_endpoint(f"{BRIDGE_URL}/health", "Bridge")
+        bridge_ok = check_endpoint(f"{BRIDGE_URL}/health", "Bridge", require_whatsapp=True)
 
         alerts = []
 

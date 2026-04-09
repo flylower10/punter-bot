@@ -144,6 +144,15 @@ def _resolve_alias(name, sport="football"):
     return row["canonical_name"] if row else name
 
 
+def _word_in(needle: str, haystack: str) -> bool:
+    """True if `needle` appears as a whole word (or full token) within `haystack`.
+
+    Uses word boundaries so "albi" does NOT match inside "albion", but
+    "brighton" DOES match inside "brighton & hove albion".
+    """
+    return bool(re.search(r"\b" + re.escape(needle) + r"\b", haystack))
+
+
 def _match_by_alias(team_names, fixtures, sport="football"):
     """
     Tier 1: Resolve team names through the alias table, then find an exact
@@ -170,9 +179,9 @@ def _match_by_alias(team_names, fixtures, sport="football"):
 
         for name in resolved:
             name_lower = name.lower()
-            if name_lower in home or home in name_lower:
+            if _word_in(name_lower, home) or _word_in(home, name_lower):
                 return _fixture_to_enrichment(fixture)
-            if name_lower in away or away in name_lower:
+            if _word_in(name_lower, away) or _word_in(away, name_lower):
                 return _fixture_to_enrichment(fixture)
 
     return None
