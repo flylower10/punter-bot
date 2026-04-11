@@ -245,10 +245,19 @@ class TestCumulativePickWebhook:
         assert pawn_pick["description"] == "Villa"
 
     def test_placer_screenshot_records_bet_placed(self, test_db, monkeypatch):
-        """When next placer posts a screenshot (all picks in), record bet as placed."""
+        """When any known player posts a bet slip screenshot (all picks in), record bet as placed."""
         _seed_player_emojis()
         monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+        # Mock bridge image fetch and LLM validation so image path works without real services
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda message_id: {"data": "fake_b64", "mimetype": "image/jpeg"},
+        )
+        monkeypatch.setattr(
+            "src.llm_client.read_bet_slip",
+            lambda data, mimetype: {"stake": 20.0, "total_odds": 3.0, "potential_return": 60.0, "legs": []},
+        )
 
         from src.app import create_app
         from src.services.week_service import get_or_create_current_week
@@ -270,15 +279,16 @@ class TestCumulativePickWebhook:
         placer = get_next_placer()
         assert placer["nickname"] == "Kev"
 
-        # Kev posts screenshot (has_media, TEST_MODE prefix for sender)
+        # Kev posts screenshot (has_media + message_id; LLM validates it as a bet slip)
         resp = client.post(
             "/webhook",
             json={
                 "sender": "Kevin",
                 "sender_phone": "",
-                "body": "Kev: ",  # Caption with prefix; could be empty
+                "body": "Kev: ",
                 "group_id": "test-group@g.us",
                 "has_media": True,
+                "message_id": "msg-abc-123",
             },
             content_type="application/json",
         )
@@ -342,8 +352,8 @@ class TestCumulativePickWebhook:
         assert "Mr Kevin" in data["reply"]
         assert "Bet slip received" in data["reply"]
 
-    def test_non_placer_screenshot_ignored(self, test_db, monkeypatch):
-        """Only the designated placer can confirm — another player's screenshot is ignored."""
+    def test_screenshot_without_message_id_ignored(self, test_db, monkeypatch):
+        """Images without a message_id cannot be fetched and are silently ignored."""
         _seed_player_emojis()
         monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
         monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")

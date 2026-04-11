@@ -129,9 +129,9 @@ def webhook():
                 elif parsed["type"] == "result":
                     reply = handle_result(parsed)
 
-    # Screenshot from the designated placer = bet placed (all picks in)
+    # Screenshot from any known player = potential bet slip (LLM validates before committing)
     if not reply and has_media:
-        reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id)
+        reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
 
     # Banter: disabled in main group for now — shadow mode only
     # if not reply and body.strip() and Config.LLM_ENABLED:
@@ -463,12 +463,15 @@ def _looks_like_bet_placed(text):
     return any(kw in t for kw in keywords)
 
 
-def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id=""):
+def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id="", from_image=False):
     """
-    When all picks are in, if the designated placer posts a screenshot or
-    confirmation text, record the bet as placed.
-    Only the designated placer is accepted — open delegation invites false
-    positives when others ask questions containing confirmation keywords.
+    When all picks are in, if any known player posts a screenshot or confirmation
+    text, record the bet as placed (placer may delegate to another group member).
+
+    For image messages (from_image=True): the image is validated via LLM before
+    committing — non-bet-slip images (memes, photos) are silently ignored.
+    For text messages (from_image=False): the caller has already validated the
+    keyword, so we commit directly.
     """
     from src.parsers.message_parser import extract_test_prefix
 
@@ -492,16 +495,40 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id=""
     if not next_placer:
         return None
 
-    # Only accept from the designated placer
+    # Accept from any known player — placer may delegate to someone else
     sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
-    if not sender_player or sender_player["id"] != next_placer["id"]:
+    if not sender_player:
         return None
 
-    advance_rotation(week["id"], next_placer["id"])
-    if message_id:
-        from src.services.bet_slip_service import process_bet_slip
+    if from_image:
+        # Validate the image is a bet slip before committing the rotation.
+        # Silently ignores unrelated images (memes, photos, etc.).
+        if not message_id:
+            return None
+        from src.services.bet_slip_service import (
+            fetch_image_from_bridge, record_bet_slip, match_legs_to_picks, update_confirmed_odds,
+        )
+        image = fetch_image_from_bridge(message_id)
+        if not image:
+            return None
+        extracted = llm_client.read_bet_slip(image["data"], image.get("mimetype", "image/jpeg"))
+        if not extracted:
+            return None
+        advance_rotation(week["id"], next_placer["id"])
         picks = get_picks_for_week(week["id"])
-        process_bet_slip(week["id"], next_placer["id"], message_id, picks)
+        try:
+            record_bet_slip(week["id"], next_placer["id"], extracted)
+            legs = extracted.get("legs") or []
+            if legs and picks:
+                matched = match_legs_to_picks(legs, picks)
+                if matched:
+                    update_confirmed_odds(matched)
+        except Exception:
+            logger.exception("Failed to persist bet slip data (week_id=%d)", week["id"])
+    else:
+        # Text-only confirmation — keyword already validated in caller
+        advance_rotation(week["id"], next_placer["id"])
+
     return butler.bet_slip_received(next_placer)
 
 
@@ -1053,6 +1080,7 @@ def test_webhook():
     sender_phone = data.get("sender_phone", "")
     body = data.get("body", "")
     has_media = data.get("has_media", False)
+    message_id = data.get("message_id", "")
 
     # Override group_id so the allowed-groups check passes
     data["group_id"] = Config.GROUP_CHAT_ID or (Config.GROUP_CHAT_IDS[0] if Config.GROUP_CHAT_IDS else "")
@@ -1091,7 +1119,7 @@ def test_webhook():
                         reply = handle_result(parsed)
 
         if not reply and has_media:
-            reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
+            reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
 
         if not reply and body.strip():
             player = lookup_player(sender_phone=sender_phone, sender_name=sender)
