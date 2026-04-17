@@ -2,8 +2,12 @@ import re
 
 from src.config import Config
 
-# Player nicknames/names used for result detection and test mode prefix matching
-# Include both nicknames (Pawn, DA) and first names (Aidan) for flexibility
+# Player nicknames/names used for result detection and test mode prefix matching.
+# Include both nicknames (Pawn, DA) and first names (Aidan) for flexibility.
+# IMPORTANT: This set must stay in sync with the aliases field in the players
+# table (player_service.py). Adding an alias to the database does NOT update
+# this set — both must be updated together. Failure to sync causes "I don't
+# recognise that player" errors when recording results.
 PLAYER_NICKNAMES = {"ed", "kev", "da", "don", "nug", "nialler", "pawn", "nugget", "aidan"}
 
 # Test mode prefix pattern: "Kev: some message" or "Ed: !stats"

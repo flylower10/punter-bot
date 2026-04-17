@@ -77,7 +77,11 @@ def add_to_penalty_queue(player_id, reason, week_id=None, front=False):
         (player_id, reason, position, week_id),
     )
 
-    # Re-sort all same-week entries by rotation order so confirmation order doesn't matter
+    # Re-sort only for standard streak penalties (front=False).
+    # Sole-loser penalties (front=True) always go to position 1 —
+    # intentionally bypassing rotation order. See RULES.md § Penalties.
+    # For streak penalties, re-sort so Ed's confirmation order doesn't
+    # affect queue ordering — rotation order always wins.
     if not front and week_id is not None:
         _reorder_week_entries_by_rotation(week_id, conn)
 

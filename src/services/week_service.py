@@ -129,7 +129,10 @@ def is_within_submission_window(group_id="default"):
         return True
     if weekday in (3, 4):
         if weekday == 4 and now.hour >= 22:
-            pass  # Don't return False yet — check DB status below
+            pass  # Past the strict deadline, but do NOT short-circuit here.
+                  # If the previous week just completed (all results in), the
+                  # window re-opens immediately for next week. Fall through to
+                  # the DB check below — it handles this case.
         else:
             return True
 
@@ -166,7 +169,15 @@ def is_within_submission_window(group_id="default"):
 
 
 def is_past_deadline():
-    """Check if we're past Friday 10PM."""
+    """
+    Simple time-only check: are we past Friday 10PM?
+
+    NOTE: Do NOT use this to decide whether to accept picks. Use
+    is_within_submission_window() instead — it handles dynamic window
+    opening when the previous week completes early, and reads DB state.
+    This function is only for contexts where DB state is irrelevant
+    (e.g. scheduler jobs that need a quick time check).
+    """
     now = _now()
     weekday = now.weekday()
 

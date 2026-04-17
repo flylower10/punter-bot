@@ -495,7 +495,12 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id=""
     if not next_placer:
         return None
 
-    # Accept from any known player — placer may delegate to someone else
+    # Accept from any known player — bet placement may be delegated.
+    # NOTE: sender_player is only used here to confirm the sender is a
+    # known group member. All downstream operations (advance_rotation,
+    # butler response) use next_placer, not sender_player. This is
+    # intentional: the rotation always credits whoever was due to place,
+    # regardless of who physically placed it.
     sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
     if not sender_player:
         return None

@@ -1,9 +1,13 @@
 """
 Bet slip image processing service.
 
-Pull-model: Flask calls the bridge's /media endpoint after validating the
-sender is the designated placer, then uses Groq vision to extract per-leg
-odds, stake, and potential return.
+Pull-model: Flask calls the bridge's /media endpoint to retrieve the image,
+then uses Groq vision to extract per-leg odds, stake, and potential return.
+
+NOTE: The caller (app.py _handle_placer_bet_confirmation) accepts images from
+any known group member, not only the designated placer. Delegation is
+intentionally supported. The placer credited in the database is always
+next_placer from rotation_service, not the image sender.
 
 All operations are best-effort — failures are logged but never propagate to
 callers. process_bet_slip() is always safe to call fire-and-forget.
