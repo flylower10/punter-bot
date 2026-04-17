@@ -276,3 +276,122 @@ class TestProcessBetSlip:
 
         # Should not raise
         process_bet_slip(week["id"], 1, "msgboom", [])
+
+
+# ---------------------------------------------------------------------------
+# Non-bet-slip image rejection via webhook
+# ---------------------------------------------------------------------------
+
+class TestNonBetSlipImageRejection:
+    """
+    Regression test for: any-player image triggering bet slip confirmation
+    when the LLM returns an all-null response (no bet slip found).
+
+    Root cause: read_bet_slip always returns a dict (json_object mode).
+    An all-null dict — {"stake": null, "total_odds": null, "legs": []} —
+    must be rejected before advance_rotation is called.
+    """
+
+    GROUP_ID = "test-group@g.us"
+
+    def _seed_players_and_picks(self, monkeypatch):
+        """Open a week and submit picks for all players so all_picks_in is True."""
+        from src.services.week_service import get_or_create_current_week
+        from src.services.pick_service import submit_pick
+
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
+
+        week = get_or_create_current_week(group_id=self.GROUP_ID)
+        players = get_all_players()
+        for p in players:
+            submit_pick(p["id"], week["id"], "Team to win", 2.0, "evens", "win")
+        return week, players
+
+    def test_all_null_llm_response_does_not_advance_rotation(self, monkeypatch):
+        """
+        When the LLM returns all-null fields and empty legs, the image is not a
+        bet slip. The rotation must NOT be advanced and no reply sent.
+        """
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_IDS", [])
+        week, players = self._seed_players_and_picks(monkeypatch)
+
+        monkeypatch.setattr(
+            "src.app.llm_client.read_bet_slip",
+            lambda b64, mime: {"stake": None, "total_odds": None, "potential_return": None, "legs": []},
+        )
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda mid: {"data": "fakebase64", "mimetype": "image/jpeg"},
+        )
+        monkeypatch.setattr("src.app.send_message", lambda chat_id, text: None)
+
+        from src.app import create_app
+        app = create_app()
+        client = app.test_client()
+
+        resp = client.post("/webhook", json={
+            "sender": players[0]["nickname"],
+            "sender_phone": "",
+            "body": "",
+            "group_id": "test-group@g.us",
+            "has_media": True,
+            "message_id": "msg-non-slip",
+        })
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        # No reply should be sent — image was not a bet slip
+        assert data.get("action") != "replied" or "bet slip" not in (data.get("reply") or "").lower()
+
+        # Rotation must not have advanced — placer_id stays None
+        from src.db import get_db
+        conn = get_db()
+        row = conn.execute("SELECT placer_id FROM weeks WHERE id = ?", (week["id"],)).fetchone()
+        conn.close()
+        assert row["placer_id"] is None
+
+    def test_valid_bet_slip_image_does_advance_rotation(self, monkeypatch):
+        """
+        Contrasting case: when the LLM returns meaningful data (legs present),
+        the rotation IS advanced.
+        """
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_IDS", [])
+        week, players = self._seed_players_and_picks(monkeypatch)
+
+        monkeypatch.setattr(
+            "src.app.llm_client.read_bet_slip",
+            lambda b64, mime: {
+                "stake": 5.0,
+                "total_odds": 8.0,
+                "potential_return": 40.0,
+                "legs": [{"selection": "Team to win", "odds": 2.0}],
+            },
+        )
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda mid: {"data": "fakebase64", "mimetype": "image/jpeg"},
+        )
+        monkeypatch.setattr("src.app.send_message", lambda chat_id, text: None)
+
+        from src.app import create_app
+        app = create_app()
+        client = app.test_client()
+
+        resp = client.post("/webhook", json={
+            "sender": players[0]["nickname"],
+            "sender_phone": "",
+            "body": "",
+            "group_id": "test-group@g.us",
+            "has_media": True,
+            "message_id": "msg-valid-slip",
+        })
+
+        assert resp.status_code == 200
+
+        from src.db import get_db
+        conn = get_db()
+        row = conn.execute("SELECT placer_id FROM weeks WHERE id = ?", (week["id"],)).fetchone()
+        conn.close()
+        assert row["placer_id"] is not None

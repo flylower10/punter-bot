@@ -514,6 +514,14 @@ def _handle_placer_bet_confirmation(sender, sender_phone, body="", message_id=""
         extracted = llm_client.read_bet_slip(image["data"], image.get("mimetype", "image/jpeg"))
         if not extracted:
             return None
+        # Reject all-null LLM responses — read_bet_slip always returns a dict
+        # (response_format: json_object forces JSON even for non-slip images).
+        # An empty legs list AND null odds means the LLM found no bet slip.
+        _legs = extracted.get("legs") or []
+        _has_slip_data = bool(_legs) or extracted.get("total_odds") is not None or extracted.get("stake") is not None
+        if not _has_slip_data:
+            logger.info("Image from %s rejected: no bet slip data extracted", sender)
+            return None
         advance_rotation(week["id"], next_placer["id"])
         picks = get_picks_for_week(week["id"])
         try:
