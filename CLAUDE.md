@@ -98,6 +98,8 @@ whenever player config changes.
 ## Test suite
 Run with: `python3 -m pytest tests/ -v`
 Run the full suite before and after any change. If adding a new behaviour, add a test.
+Read `skills/test-patterns.md` before writing tests — it documents fixtures, setup
+patterns, webhook testing, and LLM mocking conventions.
 
 ## Deployment
 Runs on Oracle Cloud (Ubuntu 22.04) managed by PM2. See `README.md` for commands.

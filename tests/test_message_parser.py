@@ -208,6 +208,13 @@ class TestResultParsing:
         assert result["parsed_data"]["player_nickname"] == "don"
         assert result["parsed_data"]["outcome"] == "loss"
 
+    def test_don_single_win_emoji(self):
+        """'Don ✅' (single emoji, win) must resolve to player 'don'."""
+        result = parse_message("Don ✅", "Ed")
+        assert result["type"] == "result"
+        assert result["parsed_data"]["player_nickname"] == "don"
+        assert result["parsed_data"]["outcome"] == "win"
+
     def test_text_nickname_still_preferred_over_emoji(self):
         """Text nickname match takes priority over emoji match."""
         emoji_map = {"\u265f\ufe0f": {"nickname": "pawn", "formal_name": "Mr Aidan"}}
@@ -566,3 +573,13 @@ class TestFalsePositivePrevention:
         result = parse_message("Ireland to qualify 13/8", "DA")
         assert result["type"] == "pick"
         assert result["parsed_data"]["odds_original"] == "13/8"
+
+    def test_time_expression_not_a_pick(self):
+        """'7/8 tonight' — slash as time range in chat, no selection present."""
+        result = parse_message("7/8 tonight", "Kev")
+        assert result["type"] == "general"
+
+    def test_half_time_score_chat_not_a_pick(self):
+        """'2/1 at half time' — in-match score commentary, not a pick submission."""
+        result = parse_message("2/1 at half time", "Nug")
+        assert result["type"] == "general"

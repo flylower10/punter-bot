@@ -1,7 +1,8 @@
 """Tests for result_service."""
 
-from src.services.pick_service import submit_pick
-from src.services.player_service import get_all_players
+from src.parsers.message_parser import parse_message
+from src.services.pick_service import submit_pick, get_player_pick
+from src.services.player_service import get_all_players, lookup_player
 from src.services.result_service import (
     record_result, get_consecutive_losses, get_week_results,
     all_results_in, override_result,
@@ -138,6 +139,54 @@ class TestWeekResults:
         record_result(pick["id"], "win")
 
         assert all_results_in(week["id"]) is False
+
+
+class TestDonAliasResultIntegration:
+    """
+    Regression tests for: 'Don' not recognised when recording results.
+
+    Root cause: two independent lookup paths ('don' in PLAYER_NICKNAMES for
+    parsing, DB aliases for player resolution) must both work and chain correctly.
+    These tests verify the full path: parse 'Don ✅' → lookup_player('don') → DA.
+    """
+
+    def test_don_win_resolves_to_declan_and_records(self):
+        """Full path: 'Don ✅' from Ed → parsed → looked up → result recorded for Declan."""
+        week = get_or_create_current_week()
+        players = get_all_players()
+        da = next(p for p in players if p["nickname"] == "DA")
+        submit_pick(da["id"], week["id"], "Liverpool 2/1", 2.0, "2/1", "win")
+
+        parsed = parse_message("Don ✅", "Ed")
+        assert parsed["type"] == "result"
+        assert parsed["parsed_data"]["player_nickname"] == "don"
+
+        player = lookup_player(sender_name=parsed["parsed_data"]["player_nickname"])
+        assert player is not None, "'don' alias must resolve to a known player"
+        assert player["nickname"] == "DA"
+
+        pick = get_player_pick(week["id"], player["id"])
+        assert pick is not None, "Declan must have a pick this week"
+
+        result = record_result(pick["id"], parsed["parsed_data"]["outcome"], confirmed_by="Ed")
+        assert result["outcome"] == "win"
+
+    def test_don_loss_resolves_to_declan_and_records(self):
+        """Same path for a loss: 'Don ❌' must record a loss for Declan."""
+        week = get_or_create_current_week()
+        players = get_all_players()
+        da = next(p for p in players if p["nickname"] == "DA")
+        submit_pick(da["id"], week["id"], "Chelsea 6/4", 2.5, "6/4", "win")
+
+        parsed = parse_message("Don ❌", "Ed")
+        assert parsed["type"] == "result"
+
+        player = lookup_player(sender_name=parsed["parsed_data"]["player_nickname"])
+        assert player["nickname"] == "DA"
+
+        pick = get_player_pick(week["id"], player["id"])
+        result = record_result(pick["id"], parsed["parsed_data"]["outcome"], confirmed_by="Ed")
+        assert result["outcome"] == "loss"
 
 
 class TestOverrideResult:

@@ -407,6 +407,14 @@ def _parse_pick(text, sender, sender_phone=""):
             remainder = DECIMAL_ODDS.sub("", text).strip()
         if not remainder:
             return None
+        # Remainder must look like a selection, not just chat context words.
+        # Valid picks have at least one proper noun (capitalised word) OR a
+        # recognised bet-type keyword. This rejects chat like "7/8 tonight"
+        # or "2/1 at half time" where the remainder has no selection.
+        has_bet_type = any(p.search(text) for p in BET_TYPE_PATTERNS.values())
+        has_proper_noun = any(w[0].isupper() for w in remainder.split() if w)
+        if not has_bet_type and not has_proper_noun:
+            return None
 
     # No odds: allow if text looks like a pick (player trusts placer, odds >= 1.5)
     if not odds_original:

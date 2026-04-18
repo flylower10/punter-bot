@@ -140,6 +140,139 @@ class TestPenaltyQueueRotationOrder:
         assert placer["nickname"] == "Nialler"
 
 
+class TestSoleLoserPenalty:
+    """
+    Tests for sole-loser penalties (front=True — bypasses rotation order).
+    These are distinct from streak penalties (front=False).
+    """
+
+    def test_sole_loser_penalty_goes_to_front(self):
+        """Sole-loser penalty must jump to position 1 ahead of any existing entries."""
+        players = get_all_players()
+        nug = next(p for p in players if p["nickname"] == "Nug")
+        kev = next(p for p in players if p["nickname"] == "Kev")
+
+        # Add a streak penalty for Nug first (normal queue)
+        add_to_penalty_queue(nug["id"], "3 consecutive losses")
+        # Kev gets a sole-loser penalty — must jump to front
+        add_to_penalty_queue(kev["id"], "sole loser", front=True)
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+    def test_standard_rotation_resumes_after_sole_loser_penalty_week(self):
+        """
+        After a sole-loser penalty week completes, standard rotation resumes
+        from the last non-penalty placer, not from the penalty player.
+        """
+        from src.db import get_db
+        players = get_all_players()
+        kev = next(p for p in players if p["nickname"] == "Kev")
+        nug = next(p for p in players if p["nickname"] == "Nug")
+
+        # Week 1: Kev places normally
+        week1 = get_or_create_current_week()
+        advance_rotation(week1["id"], kev["id"])
+        conn = get_db()
+        conn.execute("UPDATE weeks SET status = 'completed' WHERE id = ?", (week1["id"],))
+        conn.commit()
+        conn.close()
+
+        # Week 2: Nug gets a sole-loser penalty and places
+        add_to_penalty_queue(nug["id"], "sole loser", front=True)
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO weeks (week_number, season, group_id, deadline, status) "
+            "VALUES (2, '2026', 'default', '2026-01-15', 'open')"
+        )
+        week2_id = conn.execute("SELECT id FROM weeks WHERE week_number = 2").fetchone()[0]
+        conn.commit()
+        conn.close()
+
+        advance_rotation(week2_id, nug["id"])
+        conn = get_db()
+        conn.execute("UPDATE weeks SET status = 'completed' WHERE id = ?", (week2_id,))
+        conn.commit()
+        conn.close()
+
+        # Standard rotation should resume from after Kev (last non-penalty placer)
+        # → Nialler (position 2)
+        placer = get_next_placer()
+        assert placer["nickname"] == "Nialler"
+
+
+class TestDelegation:
+    """
+    Tests for the delegation scenario: a player other than the penalty queue top
+    places the bet on behalf of the group.
+    """
+
+    def test_delegation_does_not_clear_unrelated_penalty(self):
+        """
+        If Kev delegates (places the bet) while Nug has a penalty in queue,
+        Nug's penalty entry must remain unprocessed — it is not Kev's to clear.
+        """
+        from src.db import get_db
+        players = get_all_players()
+        kev = next(p for p in players if p["nickname"] == "Kev")
+        nug = next(p for p in players if p["nickname"] == "Nug")
+
+        add_to_penalty_queue(nug["id"], "3 consecutive losses")
+
+        week = get_or_create_current_week()
+        # Kev places — not Nug, even though Nug has a penalty
+        advance_rotation(week["id"], kev["id"])
+
+        conn = get_db()
+        unprocessed = conn.execute(
+            "SELECT id FROM rotation_queue WHERE player_id = ? AND processed = 0",
+            (nug["id"],),
+        ).fetchone()
+        conn.close()
+
+        assert unprocessed is not None, "Nug's penalty must remain in queue after Kev places"
+
+    def test_delegation_records_correct_placer(self):
+        """Delegated placement must record the actual placer (Kev), not the queue top (Nug)."""
+        from src.db import get_db
+        players = get_all_players()
+        kev = next(p for p in players if p["nickname"] == "Kev")
+        nug = next(p for p in players if p["nickname"] == "Nug")
+
+        add_to_penalty_queue(nug["id"], "3 consecutive losses")
+        week = get_or_create_current_week()
+        advance_rotation(week["id"], kev["id"])
+
+        conn = get_db()
+        row = conn.execute(
+            "SELECT placer_id, placer_is_penalty FROM weeks WHERE id = ?",
+            (week["id"],),
+        ).fetchone()
+        conn.close()
+
+        assert row["placer_id"] == kev["id"]
+        assert row["placer_is_penalty"] == 0  # Kev was not in penalty queue
+
+    def test_penalty_queue_top_still_next_after_delegation(self):
+        """After a delegated week, Nug (penalty queue top) should still be next placer."""
+        from src.db import get_db
+        players = get_all_players()
+        kev = next(p for p in players if p["nickname"] == "Kev")
+        nug = next(p for p in players if p["nickname"] == "Nug")
+
+        add_to_penalty_queue(nug["id"], "3 consecutive losses")
+        week = get_or_create_current_week()
+        advance_rotation(week["id"], kev["id"])
+
+        conn = get_db()
+        conn.execute("UPDATE weeks SET status = 'completed' WHERE id = ?", (week["id"],))
+        conn.commit()
+        conn.close()
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Nug"
+
+
 class TestRotationDisplay:
     def test_display_returns_data(self):
         data = get_rotation_display()
