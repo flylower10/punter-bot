@@ -510,3 +510,63 @@ class TestPickUpdateGuardrails:
         picks = get_picks_for_week(week["id"])
         nug_pick = next(p for p in picks if p["nickname"] == "Nug")
         assert nug_pick["description"] == "Arsenal 6/4"
+
+
+class TestBetPlacementConfirmation:
+    """Test bet slip confirmation and placer authorization."""
+
+    def test_non_placer_image_silently_ignored(self, test_db, monkeypatch):
+        """A non-placer sending an image must not trigger bet slip confirmation."""
+        _seed_player_emojis()
+        monkeypatch.setattr("src.app.is_within_submission_window", lambda group_id="default": True)
+        monkeypatch.setattr("src.config.Config.GROUP_CHAT_ID", "test-group@g.us")
+        monkeypatch.setattr(
+            "src.services.bet_slip_service.fetch_image_from_bridge",
+            lambda message_id: {"data": "fake_b64", "mimetype": "image/jpeg"},
+        )
+        monkeypatch.setattr(
+            "src.llm_client.read_bet_slip",
+            lambda data, mimetype: {"stake": 20.0, "total_odds": 3.0, "potential_return": 60.0, "legs": []},
+        )
+
+        from src.app import create_app
+        from src.services.week_service import get_or_create_current_week
+        from src.services.rotation_service import get_next_placer
+        from src.services.pick_service import submit_pick
+        from src.services.player_service import get_all_players
+        from src.db import get_db
+
+        app = create_app()
+        client = app.test_client()
+
+        week = get_or_create_current_week(group_id="test-group@g.us")
+        players = get_all_players()
+        for p in players:
+            submit_pick(p["id"], week["id"], f"{p['nickname']} pick 2/1", 3.0, "2/1", "win")
+
+        placer = get_next_placer()
+        assert placer["nickname"] == "Kev"
+
+        # Aidan sends an image — he is NOT the designated placer
+        resp = client.post(
+            "/webhook",
+            json={
+                "sender": "Aidan",
+                "sender_phone": "",
+                "body": "",
+                "group_id": "test-group@g.us",
+                "has_media": True,
+                "message_id": "msg-aidan-img",
+            },
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data.get("action") != "replied"
+
+        # placer_id must remain None — rotation must not advance
+        conn = get_db()
+        row = conn.execute("SELECT placer_id FROM weeks WHERE id = ?", (week["id"],)).fetchone()
+        conn.close()
+        assert row["placer_id"] is None

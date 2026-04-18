@@ -129,9 +129,13 @@ def webhook():
                 elif parsed["type"] == "result":
                     reply = handle_result(parsed)
 
-    # Screenshot from any known player = potential bet slip (LLM validates before committing)
+    # Screenshot fires auto-detection only when the sender IS the designated placer.
+    # Delegated slips use the explicit !slip reply command instead.
     if not reply and has_media:
-        reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
+        _next_placer = get_next_placer()
+        _sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+        if _next_placer and _sender_player and _sender_player["id"] == _next_placer["id"]:
+            reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
 
     # Banter: disabled in main group for now — shadow mode only
     # if not reply and body.strip() and Config.LLM_ENABLED:
