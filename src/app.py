@@ -72,6 +72,7 @@ def webhook():
     group_id = data.get("group_id", "")
     has_media = data.get("has_media", False)
     message_id = data.get("message_id", "")
+    quoted_message_id = data.get("quoted_message_id", "")
 
     # Determine if this message originates from the shadow/admin console group
     from_shadow = bool(Config.SHADOW_GROUP_ID and group_id == Config.SHADOW_GROUP_ID)
@@ -99,6 +100,7 @@ def webhook():
     if body.strip().startswith("!"):
         parsed = parse_message(body, sender, sender_phone)
         if parsed["type"] == "command":
+            parsed["quoted_message_id"] = quoted_message_id
             reply = handle_command(parsed)
         elif parsed["type"] == "result":
             reply = handle_result(parsed)
@@ -123,6 +125,7 @@ def webhook():
                 parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
                 logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
                 if parsed["type"] == "command":
+                    parsed["quoted_message_id"] = quoted_message_id
                     reply = handle_command(parsed)
                 elif parsed["type"] == "pick":
                     reply = handle_pick(parsed)
@@ -1112,6 +1115,7 @@ def test_webhook():
         if body.strip().startswith("!"):
             parsed = parse_message(body, sender, sender_phone)
             if parsed["type"] == "command":
+                parsed["quoted_message_id"] = data.get("quoted_message_id", "")
                 reply = handle_command(parsed)
             elif parsed["type"] == "result":
                 reply = handle_result(parsed)
@@ -1129,6 +1133,7 @@ def test_webhook():
                 if not reply:
                     parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
                     if parsed["type"] == "command":
+                        parsed["quoted_message_id"] = data.get("quoted_message_id", "")
                         reply = handle_command(parsed)
                     elif parsed["type"] == "pick":
                         reply = handle_pick(parsed)
