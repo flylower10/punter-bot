@@ -14,7 +14,7 @@ import pytz
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from src.config import Config
-from src.services.pick_service import get_missing_players
+from src.services.pick_service import get_missing_players, submit_pick
 from src.services.penalty_service import suggest_penalty
 from src.services.week_service import (
     get_or_create_current_week, get_current_week, close_week, is_past_deadline,
@@ -551,6 +551,11 @@ def _job_close_week():
 
             missing = get_missing_players(week["id"])
             for player in missing:
+                submit_pick(
+                    player["id"], week["id"],
+                    "NO PICK SUBMITTED — late penalty applied",
+                    1.0, "no pick", "other",
+                )
                 suggest_penalty(player["id"], week["id"], "late")
                 _send(butler.penalty_suggested(player, 0, "late", 0))
                 logger.info("Late penalty suggested for %s (week %s)", player["name"], week["week_number"])

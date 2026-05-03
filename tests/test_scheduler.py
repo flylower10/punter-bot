@@ -4,7 +4,7 @@ import src.services.scheduler as scheduler_module
 from src.config import Config
 from src.db import get_db
 from src.services.penalty_service import get_pending_penalties
-from src.services.pick_service import submit_pick
+from src.services.pick_service import submit_pick, get_missing_players
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
 
@@ -35,6 +35,34 @@ class TestCloseWeekJob:
         assert pending[0]["player_id"] == players[-1]["id"]
         assert pending[0]["type"] == "late"
         assert pending[0]["status"] == "suggested"
+
+    def test_placeholder_pick_inserted_for_missing_players(self, monkeypatch):
+        monkeypatch.setattr(Config, "GROUP_CHAT_ID", GROUP_ID)
+        monkeypatch.setattr(scheduler_module, "_send_fn", lambda gid, msg: None)
+
+        week = get_or_create_current_week(group_id=GROUP_ID)
+        conn = get_db()
+        conn.execute("UPDATE weeks SET status = 'open' WHERE id = ?", (week["id"],))
+        conn.commit()
+        conn.close()
+
+        players = get_all_players()
+        for p in players[:-1]:
+            submit_pick(p["id"], week["id"], "Team to win", 2.0, "2/1", "win")
+
+        scheduler_module._job_close_week()
+
+        # Missing player now has a placeholder pick — all_picks_in should be satisfied
+        assert get_missing_players(week["id"]) == []
+
+        conn = get_db()
+        pick = conn.execute(
+            "SELECT * FROM picks WHERE week_id = ? AND player_id = ?",
+            (week["id"], players[-1]["id"]),
+        ).fetchone()
+        conn.close()
+        assert pick is not None
+        assert "NO PICK SUBMITTED" in pick["description"]
 
     def test_no_penalty_when_all_picks_submitted(self, monkeypatch):
         monkeypatch.setattr(Config, "GROUP_CHAT_ID", GROUP_ID)
