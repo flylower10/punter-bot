@@ -517,7 +517,28 @@ def _cmd_override(parsed, args):
     if not result:
         return f"{target['formal_name']} has no pick recorded for this week."
 
-    return f"Result overridden. {target['formal_name']}: {outcome}."
+    reply = f"Result overridden. {target['formal_name']}: {outcome}."
+
+    if all_results_complete(week["id"]):
+        results = get_week_results(week["id"])
+        complete_week(week["id"])
+        losers = [r for r in results if r["outcome"] == "loss"]
+        if len(losers) == 1:
+            add_to_penalty_queue(losers[0]["player_id"], "sole loser", week["id"], front=True)
+            record_sole_loser_penalty(losers[0]["player_id"], week["id"])
+        leaderboard = get_leaderboard()
+        next_placer = get_next_placer()
+        reply += "\n\n" + butler.week_complete_summary(
+            results, week["week_number"], leaderboard or [], next_placer or {}
+        )
+        if week["week_number"] % 5 == 0:
+            try:
+                from src.services.report_service import schedule_report
+                schedule_report(week["season"], week["week_number"], _get_group_id())
+            except Exception:
+                logger.exception("Failed to schedule Punter Report after week completion")
+
+    return reply
 
 
 def _looks_like_bet_placed(text):
