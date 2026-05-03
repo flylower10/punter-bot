@@ -485,9 +485,11 @@ def _cmd_confirm(parsed, args):
 
     confirmed, vault_total = result
 
-    # If it's a streak_3 penalty, add to rotation queue
+    # Add to rotation queue for penalties that require placing a future bet
     if confirmed["type"] == "streak_3":
         add_to_penalty_queue(confirmed["player_id"], "3 consecutive losses", confirmed["week_id"])
+    elif confirmed["type"] == "late":
+        add_to_penalty_queue(confirmed["player_id"], "late pick", confirmed["week_id"])
 
     return butler.penalty_confirmed(player, confirmed["amount"], vault_total)
 
