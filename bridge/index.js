@@ -64,6 +64,7 @@ const client = new Client({
     headless: true,
     timeout: 180000, // 3 min — Chrome launch is slow on OCI VM (WS endpoint wait)
     protocolTimeout: 300000, // 5 min — WhatsApp Web init needs time
+    env: { ...process.env, XDG_DATA_DIRS: "/usr/local/share:/usr/share" }, // strip snap dirs that cause Chrome GPU provider errors
     ...(executablePath && { executablePath }),
     args: [
       "--no-sandbox",
