@@ -328,6 +328,11 @@ def _parse_command(text, sender, sender_phone=""):
     command = parts[0].lower() if parts else ""
     args = parts[1:] if len(parts) > 1 else []
 
+    # Bare punctuation ("!!!", "!😂") is chat excitement, not a command —
+    # replying "I don't recognise the command !!" reads as scolding the group.
+    if not command.isalnum():
+        return _make_result("general", text, sender, {}, sender_phone)
+
     return _make_result("command", text, sender, {
         "command": command,
         "args": args,

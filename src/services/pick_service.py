@@ -371,3 +371,24 @@ def get_matched_picks_for_week(week_id):
     ).fetchall()
     conn.close()
     return [dict(p) for p in picks]
+
+
+def get_unresulted_picks_with_players(week_id):
+    """Return matched picks with no result yet, with player and kickoff info.
+
+    Used by the stale-results nudge to tell admins which picks are still
+    waiting on a result long after kickoff.
+    """
+    conn = get_db()
+    picks = conn.execute(
+        "SELECT p.id, p.description, pl.nickname, pl.formal_name, f.kickoff "
+        "FROM picks p "
+        "JOIN players pl ON pl.id = p.player_id "
+        "JOIN fixtures f ON f.api_id = p.api_fixture_id AND f.sport = p.sport "
+        "LEFT JOIN results r ON r.pick_id = p.id "
+        "WHERE p.week_id = ? AND p.api_fixture_id IS NOT NULL AND r.id IS NULL "
+        "ORDER BY f.kickoff",
+        (week_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(p) for p in picks]

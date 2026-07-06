@@ -138,6 +138,15 @@ def init_scheduler(send_message_fn):
         id="auto_result_monday",
     )
 
+    # Daily 10:30PM — nudge admins (shadow group) about stale unresulted picks
+    _scheduler.add_job(
+        _job_stale_results,
+        "cron",
+        hour=22,
+        minute=30,
+        id="stale_results",
+    )
+
     _scheduler.start()
     logger.info("Scheduler started with %d jobs", len(_scheduler.get_jobs()))
 
@@ -561,6 +570,49 @@ def _job_close_week():
                 logger.info("Late penalty suggested for %s (week %s)", player["name"], week["week_number"])
     except Exception:
         logger.exception("Error in close_week job")
+
+
+STALE_RESULT_HOURS = 5  # hours after kickoff before a missing result is "stale"
+
+
+def _job_stale_results():
+    """Daily 10:30PM: tell the shadow group about picks still unresulted
+    long after kickoff, so admins act before players prod the bot in chat."""
+    try:
+        if not Config.SHADOW_GROUP_ID or not _send_fn:
+            return
+        week = get_current_week(group_id=_main_group_id())
+        if not week or week["status"] != "closed":
+            return
+
+        from src.services.pick_service import get_unresulted_picks_with_players
+        tz = pytz.timezone(Config.TIMEZONE)
+        now = datetime.now(tz)
+        cutoff = now - timedelta(hours=STALE_RESULT_HOURS)
+
+        stale = []
+        for pick in get_unresulted_picks_with_players(week["id"]):
+            try:
+                ko = datetime.fromisoformat(pick["kickoff"])
+                if ko.tzinfo is None:
+                    ko = tz.localize(ko)
+            except (ValueError, TypeError):
+                continue
+            if ko < cutoff:
+                stale.append(pick)
+
+        if stale:
+            lines = [
+                f"⏳ {len(stale)} pick(s) for week {week['week_number']} still "
+                f"unresulted more than {STALE_RESULT_HOURS}h after kickoff:"
+            ]
+            for pick in stale:
+                lines.append(f"• {pick['nickname']} — {pick['description']}")
+            lines.append("Resolve with !override <player> <win|loss|void> if auto-resulting can't.")
+            _send_fn(Config.SHADOW_GROUP_ID, "\n".join(lines))
+            logger.info("Stale results nudge sent (%d picks)", len(stale))
+    except Exception:
+        logger.exception("Error in stale_results job")
 
 
 def _job_fetch_fixtures():

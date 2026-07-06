@@ -1,7 +1,9 @@
 import logging
 import os
 import re
+from datetime import datetime
 
+import pytz
 import requests
 from flask import Flask, g, jsonify, request
 
@@ -925,6 +927,7 @@ def handle_pick(parsed):
         raw = parsed.get("raw_text", "")
         if player_emojis and not any(e in raw for e in player_emojis):
             logger.info("Pick ignored — %s's emoji not present in message", player["name"])
+            _nudge_shadow_if_missing_pick(player, raw, _get_group_id())
             return None
 
     # Check placer lock BEFORE window check — once bet is placed, silently ignore
@@ -1006,6 +1009,38 @@ def handle_pick(parsed):
             reply += "\nAll selections have been received."
 
     return reply
+
+
+def _nudge_shadow_if_missing_pick(player, raw_text, group_id, now=None):
+    """Surface a silently-dropped pick-like message to the shadow group.
+
+    The emoji guard drops most odds banter correctly, but a genuine pick
+    typed without the emoji prefix is swallowed with no feedback — near
+    the deadline that ends in a late penalty. When the sender has no pick
+    yet on a Thursday/Friday inside the window, tell the admins.
+    """
+    if not Config.SHADOW_GROUP_ID:
+        return
+    try:
+        if not is_within_submission_window(group_id):
+            return
+        now = now or datetime.now(pytz.timezone(Config.TIMEZONE))
+        if now.weekday() not in (3, 4):  # Thursday, Friday
+            return
+        week = get_current_week(group_id=group_id)
+        if not week or week.get("placer_id"):
+            return
+        if get_player_pick(week["id"], player["id"]):
+            return
+        send_message(
+            Config.SHADOW_GROUP_ID,
+            f"👀 {player['name']} sent a pick-like message without their emoji "
+            f"and has no pick for week {week['week_number']} yet:\n"
+            f"“{raw_text[:120]}”",
+        )
+        logger.info("Shadow nudge sent for %s (no pick yet)", player["name"])
+    except Exception:
+        logger.exception("Shadow nudge failed")
 
 
 def _gaa_clarification(sport, description):

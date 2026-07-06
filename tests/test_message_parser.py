@@ -598,3 +598,30 @@ class TestFalsePositivePrevention:
         """'2/1 at half time' — in-match score commentary, not a pick submission."""
         result = parse_message("2/1 at half time", "Nug")
         assert result["type"] == "general"
+
+
+class TestPunctuationNotCommand:
+    """Bare punctuation like '!!!' is chat excitement, not a command —
+    it must not trigger a visible 'I don't recognise the command' reply."""
+
+    def test_triple_bang_is_general(self):
+        result = parse_message("!!!", "Kev")
+        assert result["type"] == "general"
+
+    def test_lone_bang_is_general(self):
+        result = parse_message("!", "Kev")
+        assert result["type"] == "general"
+
+    def test_bang_with_emoji_is_general(self):
+        result = parse_message("!😂😂", "Kev")
+        assert result["type"] == "general"
+
+    def test_real_commands_still_parse(self):
+        result = parse_message("!ping", "Kev")
+        assert result["type"] == "command"
+        assert result["parsed_data"]["command"] == "ping"
+
+    def test_command_with_args_still_parses(self):
+        result = parse_message("!confirm penalty kev", "Ed")
+        assert result["type"] == "command"
+        assert result["parsed_data"]["args"] == ["penalty", "kev"]

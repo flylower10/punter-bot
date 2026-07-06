@@ -201,7 +201,9 @@ def all_picks_in(placer, picks=None):
     """
     header = (
         f"All selections have been received.  "
-        f"{placer['formal_name']}, you are next in the rotation to place the wager."
+        f"{placer['formal_name']}, you are next in the rotation to place the wager. "
+        f"Should another gentleman place it on your behalf, he may reply !slip "
+        f"to the bet slip screenshot and the rotation will still credit you."
     )
     if not picks:
         return header
