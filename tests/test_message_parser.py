@@ -2,7 +2,7 @@ import os
 
 from src.parsers.message_parser import (
     parse_message, extract_test_prefix, parse_cumulative_picks, detect_sport,
-    gaa_needs_clarification, _parse_pick,
+    gaa_needs_clarification,
 )
 
 

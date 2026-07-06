@@ -14,7 +14,6 @@ import pytz
 from src.config import Config
 from src.db import get_db
 from src.api.api_football import (
-    get_fixtures_by_date_range,
     get_fixtures_by_date,
     get_fixture_by_id,
     PRIORITY_LEAGUES,

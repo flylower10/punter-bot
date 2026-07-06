@@ -1,6 +1,5 @@
 """Tests for Phase 0.5 infrastructure: health endpoint used by health check script."""
 
-import pytest
 
 from src.app import create_app
 

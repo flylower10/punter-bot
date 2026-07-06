@@ -1,5 +1,5 @@
 from src.db import get_db
-from src.services.player_service import get_all_players, get_player_by_id, get_rotation_order
+from src.services.player_service import get_player_by_id, get_rotation_order
 
 
 def get_next_placer():

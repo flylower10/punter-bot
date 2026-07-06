@@ -38,7 +38,7 @@ class TestShadowNudge:
     def test_nudges_shadow_when_player_missing_pick_near_deadline(
         self, nudge_env, mock_send_message
     ):
-        week = get_or_create_current_week(group_id=GROUP_ID)
+        get_or_create_current_week(group_id=GROUP_ID)
         player = _get_player()
 
         _nudge_shadow_if_missing_pick(

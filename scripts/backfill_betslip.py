@@ -11,7 +11,6 @@ Requires: GROQ_API_KEY in .env, and the DB to be accessible (DB_PATH in .env or 
 
 import argparse
 import base64
-import json
 import sys
 from pathlib import Path
 
@@ -83,7 +82,7 @@ def main():
         print("Error: Groq extraction returned nothing — check GROQ_API_KEY and model availability")
         sys.exit(1)
 
-    print(f"Extracted:")
+    print("Extracted:")
     print(f"  stake:           {extracted.get('stake')}")
     print(f"  total_odds:      {extracted.get('total_odds')}")
     print(f"  potential_return:{extracted.get('potential_return')}")

@@ -1,7 +1,7 @@
 """Tests for _cmd_confirm penalty confirmation UX."""
 
 from src.app import _cmd_confirm
-from src.services.penalty_service import suggest_penalty, get_pending_penalties
+from src.services.penalty_service import suggest_penalty
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
 

@@ -12,9 +12,6 @@ to test enforcement in isolation from the real clock.
 
 import pytest
 
-from src.services.player_service import get_all_players
-from src.services.pick_service import submit_pick
-from src.services.week_service import get_or_create_current_week
 
 
 GROUP_ID = "test-group@g.us"

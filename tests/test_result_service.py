@@ -44,7 +44,7 @@ class TestConsecutiveLosses:
         assert get_consecutive_losses(players[0]["id"]) == 0
 
     def test_streak_of_losses(self):
-        week = get_or_create_current_week()
+        get_or_create_current_week()
         players = get_all_players()
         player = players[0]
 
@@ -76,7 +76,7 @@ class TestConsecutiveLosses:
         assert get_consecutive_losses(player["id"]) == 3
 
     def test_streak_broken_by_win(self):
-        week = get_or_create_current_week()
+        get_or_create_current_week()
         players = get_all_players()
         player = players[0]
 

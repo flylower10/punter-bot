@@ -142,7 +142,7 @@ def main():
              EXTRACTED["total_odds"], EXTRACTED["stake"], EXTRACTED["potential_return"]),
         )
         conn.commit()
-        print(f"\nInserted bet_slips row.")
+        print("\nInserted bet_slips row.")
     else:
         print("\nWarning: no placer_id on week — skipping bet_slips insert.")
     conn.close()

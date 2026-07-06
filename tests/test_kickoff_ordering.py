@@ -1,8 +1,6 @@
 """Tests for kickoff-ordered picks in all_picks_in announcement."""
 
-from datetime import datetime
 
-import pytz
 
 from src.db import get_db
 from src.services.pick_service import (

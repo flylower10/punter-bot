@@ -7,7 +7,6 @@ All times are in Europe/Dublin timezone.
 """
 
 import logging
-from collections import defaultdict
 from datetime import datetime, timedelta
 
 import pytz
@@ -17,7 +16,7 @@ from src.config import Config
 from src.services.pick_service import get_missing_players, submit_pick
 from src.services.penalty_service import suggest_penalty
 from src.services.week_service import (
-    get_or_create_current_week, get_current_week, close_week, is_past_deadline,
+    get_or_create_current_week, get_current_week, close_week,
 )
 import src.butler as butler
 

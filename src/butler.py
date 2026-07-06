@@ -238,21 +238,13 @@ def result_announced(player, description, odds, outcome, streak=None, acca_lost=
 
     if outcome == "win":
         emoji = "\u2705"
-        scenario = "result_win_acca_lost" if acca_lost else "result_win"
     elif outcome == "loss":
         streak_num = 1
         if streak and streak.endswith("L"):
             streak_num = int(streak[:-1])
         emoji = "\u274c" * streak_num
-        if streak_num in (3, 5, 7):
-            scenario = f"result_streak_{streak_num}"
-        elif acca_lost:
-            scenario = "result_loss_acca_lost"
-        else:
-            scenario = "result_loss"
     else:
         emoji = "Void"
-        scenario = "result_loss"
 
     template = f"{player['formal_name']} {emoji} \u2014 {display_text} @ {odds}"
 
@@ -648,7 +640,7 @@ def match_event_bundle(fixture_events_map):
     sections = []
     for (home, away), events in fixture_events_map.items():
         lines = [_format_event_brief(ev) for ev in events]
-        lines = [l for l in lines if l]
+        lines = [ln for ln in lines if ln]
         if lines:
             sections.append(f"{home} vs {away}\n" + "\n".join(lines))
 

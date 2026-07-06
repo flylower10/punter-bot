@@ -74,7 +74,7 @@ def auto_result_week(week_id):
 
         # Record the result
         score_str = f"{fixture.get('home_score', '?')}-{fixture.get('away_score', '?')}"
-        result = record_result(pick["id"], outcome, confirmed_by="auto")
+        record_result(pick["id"], outcome, confirmed_by="auto")
 
         # Update result with score
         conn = get_db()

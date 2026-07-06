@@ -1,0 +1,13 @@
+[tool.ruff]
+# Server runs Python 3.10 (Ubuntu 22.04); keep 3.9 floor for local dev
+target-version = "py39"
+line-length = 120
+extend-exclude = ["bridge", "venv"]
+
+[tool.ruff.lint]
+# Defaults (pyflakes + pycodestyle errors) — regression net, not a style war
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+# One-off scripts use sys.path.insert before importing src
+"scripts/*" = ["E402"]

@@ -1,12 +1,11 @@
 """Integration tests for emoji-based cumulative pick submission via webhook."""
 
-import pytest
 
 from src.db import get_db
 from src.parsers.message_parser import parse_cumulative_picks
 from src.services.player_service import get_emoji_to_player_map
 from src.services.pick_service import get_picks_for_week
-from src.services.week_service import get_or_create_current_week, is_within_submission_window
+from src.services.week_service import get_or_create_current_week
 
 
 def _seed_player_emojis():
@@ -101,7 +100,6 @@ class TestCumulativePickWebhook:
         players = get_all_players()
         pawn = next(p for p in players if p["nickname"] == "Pawn")
         kev = next(p for p in players if p["nickname"] == "Kev")
-        ed = next(p for p in players if p["nickname"] == "Ed")
 
         submit_pick(pawn["id"], week["id"], "Dortmund 6/10", 1.6, "6/10", "win")
         submit_pick(kev["id"], week["id"], "Liverpool 2/1", 3.0, "2/1", "win")

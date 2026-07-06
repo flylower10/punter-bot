@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
 from src.db import get_db, init_db
-from src.services.bet_slip_service import match_legs_to_picks, record_bet_slip, update_confirmed_odds
+from src.services.bet_slip_service import match_legs_to_picks, update_confirmed_odds
 from src.services.pick_service import get_picks_for_week
 
 EXTRACTED = {
@@ -79,7 +79,7 @@ def main():
     for p in picks:
         print(f"  [{p['id']}] {p['description']}  (odds_decimal={p.get('odds_decimal')})")
 
-    print(f"\nExtracted legs:")
+    print("\nExtracted legs:")
     for leg in EXTRACTED["legs"]:
         print(f"  {leg['selection']:25s}  {leg['odds']}")
 
@@ -108,7 +108,7 @@ def main():
              EXTRACTED["total_odds"], EXTRACTED["stake"], EXTRACTED["potential_return"]),
         )
         conn.commit()
-        print(f"\nInserted bet_slips row.")
+        print("\nInserted bet_slips row.")
     else:
         print("\nWarning: no placer_id on week — skipping bet_slips insert.")
     conn.close()

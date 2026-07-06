@@ -1,6 +1,5 @@
 """Tests for auto-result service: team matching, alias resolution, pick evaluation."""
 
-import json
 
 from src.db import get_db
 from src.services.auto_result_service import (
@@ -12,7 +11,6 @@ from src.services.auto_result_service import (
 from src.services.pick_service import submit_pick
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
-from src.services.result_service import record_result
 
 
 def _insert_fixture(api_id=12345, status="FT", home="Liverpool", away="Arsenal",

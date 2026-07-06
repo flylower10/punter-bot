@@ -15,7 +15,7 @@ from src.services.player_service import (
 )
 from src.services.week_service import (
     get_or_create_current_week, get_current_week, get_week_for_reset,
-    is_within_submission_window, is_past_deadline, complete_week,
+    is_within_submission_window, complete_week,
 )
 from src.services.pick_service import (
     submit_pick, get_missing_players, all_picks_in, get_player_pick, get_picks_for_week,
@@ -710,7 +710,7 @@ def _cmd_report(parsed, args):
     if not _is_authorized_admin(parsed):
         return "Only an admin may generate the Punter Report."
 
-    from src.services.report_service import get_period_data, publish_report
+    from src.services.report_service import get_period_data
     from src.db import get_db
 
     group_id = _get_group_id()
@@ -1083,7 +1083,7 @@ def handle_result(parsed):
         return f"I beg your pardon, but {target_player['formal_name']} has no pick recorded for this week."
 
     # Record the result
-    result = record_result(pick["id"], data["outcome"], confirmed_by=parsed["sender"])
+    record_result(pick["id"], data["outcome"], confirmed_by=parsed["sender"])
 
     # Get streak info for both announcement and penalty check
     streak = get_consecutive_losses(target_player["id"])

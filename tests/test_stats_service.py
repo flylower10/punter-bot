@@ -33,7 +33,7 @@ class TestPlayerStats:
         assert stats["form"] == "\u2705"
 
     def test_mixed_results(self):
-        week = get_or_create_current_week()
+        get_or_create_current_week()
         players = get_all_players()
         player = players[0]
 

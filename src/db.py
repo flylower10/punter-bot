@@ -12,6 +12,11 @@ def get_db():
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Flask request threads and APScheduler jobs share this database:
+    # WAL lets readers proceed during a write, and the busy timeout makes
+    # concurrent writers wait instead of raising 'database is locked'.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 

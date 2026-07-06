@@ -13,7 +13,6 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 
-import pytz
 
 from src.config import Config
 from src.db import get_db

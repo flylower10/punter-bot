@@ -9,7 +9,6 @@ Docs: https://www.api-football.com/documentation-v3
 
 import json
 import logging
-import os
 from datetime import datetime, date
 from pathlib import Path
 

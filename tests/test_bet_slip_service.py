@@ -1,16 +1,14 @@
 """Tests for bet_slip_service."""
 
-import pytest
 
 from src.db import get_db
 from src.services.bet_slip_service import (
-    fetch_image_from_bridge,
     match_legs_to_picks,
     record_bet_slip,
     update_confirmed_odds,
     process_bet_slip,
 )
-from src.services.pick_service import submit_pick, get_picks_for_week
+from src.services.pick_service import submit_pick
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
 

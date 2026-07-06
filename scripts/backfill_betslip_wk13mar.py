@@ -83,7 +83,7 @@ def main():
     for p in picks:
         print(f"  [{p['id']}] {p['description']}")
 
-    print(f"\nExtracted legs:")
+    print("\nExtracted legs:")
     for leg in EXTRACTED["legs"]:
         print(f"  {leg['selection']:25s}  {leg['odds']}")
 
@@ -103,7 +103,7 @@ def main():
 
     if week["placer_id"]:
         record_bet_slip(week["id"], week["placer_id"], EXTRACTED)
-        print(f"\nInserted bet_slips row.")
+        print("\nInserted bet_slips row.")
     else:
         print("\nWarning: week has no placer_id — skipping bet_slips insert.")
         print("Set it manually: UPDATE weeks SET placer_id = <id> WHERE id = <week_id>;")

@@ -3,14 +3,14 @@
 import json
 
 from src.db import get_db
-from src.services.fixture_service import extract_events, get_fixture_by_api_id
+from src.services.fixture_service import extract_events
 from src.services.match_monitor_service import (
     poll_fixtures,
     get_unresulted_picks_for_week,
     _record_event_if_new,
     _collect_new_events,
 )
-from src.services.auto_result_service import auto_result_fixture, COMPLETED_STATUSES
+from src.services.auto_result_service import auto_result_fixture
 from src.services.pick_service import submit_pick
 from src.services.player_service import get_all_players
 from src.services.week_service import get_or_create_current_week
@@ -763,7 +763,7 @@ class TestMatchEventBundle:
         assert "Núñez" in msg
         # Brief lines should NOT contain team names
         lines = msg.split("\n")
-        event_lines = [l for l in lines if "Salah" in l or "Núñez" in l]
+        event_lines = [ln for ln in lines if "Salah" in ln or "Núñez" in ln]
         for line in event_lines:
             assert "Liverpool" not in line
             assert "Arsenal" not in line
