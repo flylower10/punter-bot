@@ -65,6 +65,21 @@ class TestPickParsing:
         assert result["type"] == "pick"
         assert result["parsed_data"]["bet_type"] == "over_under"
 
+    def test_over_under_line_not_parsed_as_odds(self):
+        # "over 43.5 points" — the 43.5 is the points line, not the betting price
+        result = parse_message("Mayo Tyrone over 43.5 points", "Kev")
+        assert result is not None
+        assert result["parsed_data"]["odds_decimal"] != 43.5
+        # No separate price supplied — should fall through to placer default
+        assert result["parsed_data"]["odds_original"] == "placer"
+
+    def test_over_under_line_with_separate_odds(self):
+        # Points line + separate fractional price: 43.5 should not shadow 9/2
+        result = parse_message("Mayo Tyrone over 43.5 points 9/2", "Kev")
+        assert result is not None
+        assert result["parsed_data"]["odds_original"] == "9/2"
+        assert abs(result["parsed_data"]["odds_decimal"] - 5.5) < 0.01
+
     def test_handicap_detection(self):
         result = parse_message("Munster -13 at 4/5", "Nialler")
         assert result["type"] == "pick"

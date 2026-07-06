@@ -390,8 +390,10 @@ def _parse_pick(text, sender, sender_phone=""):
         odds_decimal = 2.0
 
     # Check for decimal odds (e.g. 2.0, 3.75)
+    # Strip over/under lines first so "over 43.5 points" doesn't get treated as decimal odds 43.5
     if not odds_original:
-        match = DECIMAL_ODDS.search(text)
+        text_no_ou = re.sub(r'\b(?:over|under)\s+\d+\.?\d*', '', text, flags=re.IGNORECASE)
+        match = DECIMAL_ODDS.search(text_no_ou)
         if match:
             odds_original = match.group(1)
             odds_decimal = float(odds_original)
