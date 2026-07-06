@@ -31,6 +31,7 @@ from src.services.penalty_service import (
 )
 from src.services.rotation_service import get_next_placer, add_to_penalty_queue, get_rotation_display, advance_rotation
 from src.services.stats_service import get_player_stats, get_leaderboard
+from src.alerts import send_alert
 import src.butler as butler
 from src import llm_client
 
@@ -94,73 +95,80 @@ def webhook():
 
     logger.info("Message from %s: %s", sender, body[:100])
 
-    reply = None
+    # Any unhandled error below must not become a silent 500 — log it,
+    # alert the admin channel, and acknowledge the bridge cleanly.
+    try:
+        reply = None
 
-    # Commands always use single-message parsing
-    if body.strip().startswith("!"):
-        parsed = parse_message(body, sender, sender_phone)
-        if parsed["type"] == "command":
-            parsed["quoted_message_id"] = quoted_message_id
-            reply = handle_command(parsed)
-        elif parsed["type"] == "result":
-            reply = handle_result(parsed)
-        elif parsed["type"] == "pick":
-            reply = handle_pick(parsed)
-    else:
-        # Try cumulative format first (emoji + pick per line)
-        emoji_map = get_emoji_to_player_map()
-        cumulative = parse_cumulative_picks(body, emoji_map)
-
-        if len(cumulative) >= 1:
-            reply = handle_cumulative_picks(cumulative)
+        # Commands always use single-message parsing
+        if body.strip().startswith("!"):
+            parsed = parse_message(body, sender, sender_phone)
+            if parsed["type"] == "command":
+                parsed["quoted_message_id"] = quoted_message_id
+                reply = handle_command(parsed)
+            elif parsed["type"] == "result":
+                reply = handle_result(parsed)
+            elif parsed["type"] == "pick":
+                reply = handle_pick(parsed)
         else:
-            # Check bet placement BEFORE pick parsing — bet365 share links contain
-            # "bet slip" in the WhatsApp preview text and would otherwise be parsed
-            # as picks and rejected with "submission window closed".
-            # Note: text path intentionally accepts any known player (the placer
-            # may ask someone to type "sorted" on their behalf). This is distinct
-            # from the image path (placer-only) and !slip (explicit, any player).
-            if _looks_like_bet_placed(body):
-                reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
+            # Try cumulative format first (emoji + pick per line)
+            emoji_map = get_emoji_to_player_map()
+            cumulative = parse_cumulative_picks(body, emoji_map)
 
-            if not reply:
-                # Fall back to single-message parsing (pass emoji_map for emoji-based results)
-                parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
-                logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
-                if parsed["type"] == "command":
-                    parsed["quoted_message_id"] = quoted_message_id
-                    reply = handle_command(parsed)
-                elif parsed["type"] == "pick":
-                    reply = handle_pick(parsed)
-                elif parsed["type"] == "result":
-                    reply = handle_result(parsed)
+            if len(cumulative) >= 1:
+                reply = handle_cumulative_picks(cumulative)
+            else:
+                # Check bet placement BEFORE pick parsing — bet365 share links contain
+                # "bet slip" in the WhatsApp preview text and would otherwise be parsed
+                # as picks and rejected with "submission window closed".
+                # Note: text path intentionally accepts any known player (the placer
+                # may ask someone to type "sorted" on their behalf). This is distinct
+                # from the image path (placer-only) and !slip (explicit, any player).
+                if _looks_like_bet_placed(body):
+                    reply = _handle_placer_bet_confirmation(sender, sender_phone, body)
 
-    # Screenshot fires auto-detection only when the sender IS the designated placer.
-    # Delegated slips use the explicit !slip reply command instead.
-    if not reply and has_media:
-        _next_placer = get_next_placer()
-        _sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
-        if _next_placer and _sender_player and _sender_player["id"] == _next_placer["id"]:
-            reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
+                if not reply:
+                    # Fall back to single-message parsing (pass emoji_map for emoji-based results)
+                    parsed = parse_message(body, sender, sender_phone, emoji_map=emoji_map)
+                    logger.info("Parsed as: %s (sender: %s)", parsed["type"], parsed["sender"])
+                    if parsed["type"] == "command":
+                        parsed["quoted_message_id"] = quoted_message_id
+                        reply = handle_command(parsed)
+                    elif parsed["type"] == "pick":
+                        reply = handle_pick(parsed)
+                    elif parsed["type"] == "result":
+                        reply = handle_result(parsed)
 
-    # Banter: disabled in main group for now — shadow mode only
-    # if not reply and body.strip() and Config.LLM_ENABLED:
-    #     reply = _try_banter(body, sender, sender_phone)
+        # Screenshot fires auto-detection only when the sender IS the designated placer.
+        # Delegated slips use the explicit !slip reply command instead.
+        if not reply and has_media:
+            _next_placer = get_next_placer()
+            _sender_player = lookup_player(sender_phone=sender_phone, sender_name=sender)
+            if _next_placer and _sender_player and _sender_player["id"] == _next_placer["id"]:
+                reply = _handle_placer_bet_confirmation(sender, sender_phone, body, message_id=message_id, from_image=True)
 
-    if reply:
-        send_message(group_id, reply)
+        # Banter: disabled in main group for now — shadow mode only
+        # if not reply and body.strip() and Config.LLM_ENABLED:
+        #     reply = _try_banter(body, sender, sender_phone)
 
-        # Mirror to shadow for monitoring — only when triggered from main group (not shadow itself)
-        if not from_shadow and Config.SHADOW_GROUP_ID:
-            _shadow_message(sender, body, reply, group_id)
+        if reply:
+            send_message(group_id, reply)
 
-        return jsonify({"action": "replied", "reply": reply})
+            # Mirror to shadow for monitoring — only when triggered from main group (not shadow itself)
+            if not from_shadow and Config.SHADOW_GROUP_ID:
+                _shadow_message(sender, body, reply, group_id)
 
-    # Shadow banter — only for main group messages (avoid loops)
-    if not from_shadow and Config.SHADOW_GROUP_ID and body.strip() and ((_is_brian(sender) and _brian_is_stirring(body)) or _BANTER_TRIGGERS.search(body)):
-        _shadow_banter(sender, sender_phone, body)
+            return jsonify({"action": "replied", "reply": reply})
 
-    return jsonify({"action": "no_reply"})
+        # Shadow banter — only for main group messages (avoid loops)
+        if not from_shadow and Config.SHADOW_GROUP_ID and body.strip() and ((_is_brian(sender) and _brian_is_stirring(body)) or _BANTER_TRIGGERS.search(body)):
+            _shadow_banter(sender, sender_phone, body)
+
+        return jsonify({"action": "no_reply"})
+    except Exception:
+        logger.exception("Unhandled error processing message from %s: %s", sender, body[:100])
+        send_alert(f"⚠️ Punter Bot: unhandled error processing message from {sender}: {body[:80]}")
+        return jsonify({"action": "error"})
 
 
 def handle_command(parsed):
@@ -1273,12 +1281,14 @@ def send_message(chat_id, text):
                     time.sleep(wait)
                     continue
             logger.error("Bridge returned %d: %s", resp.status_code, resp.text[:200] if resp.text else "")
+            send_alert(f"⚠️ Punter Bot: bridge returned {resp.status_code} sending to {chat_id} — message dropped: {text[:80]}")
             return
         except requests.RequestException as e:
-            logger.error("Failed to send message via bridge: %s", e)
+            logger.error("Failed to send message via bridge (attempt %d/3): %s", attempt + 1, e)
             if attempt < 2:
                 time.sleep(3)
-            return
+                continue
+            send_alert(f"⚠️ Punter Bot: failed to reach bridge after 3 attempts sending to {chat_id} — message dropped: {text[:80]}")
 
 
 def create_app():

@@ -32,3 +32,19 @@ def test_db(monkeypatch):
     yield db_path
 
     os.unlink(db_path)
+
+
+@pytest.fixture(autouse=True)
+def mock_send_message(monkeypatch):
+    """Capture outgoing bridge messages instead of hitting the network.
+
+    Without this, any webhook test that produces a reply spends ~3s in
+    send_message retrying against a bridge that isn't running.
+    Tests for send_message itself import the real function directly,
+    so this patch doesn't affect them.
+    """
+    sent = []
+    monkeypatch.setattr(
+        "src.app.send_message", lambda chat_id, text: sent.append((chat_id, text))
+    )
+    return sent
